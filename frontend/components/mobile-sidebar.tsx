@@ -15,6 +15,7 @@ import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { buildIndexAPI } from "@/lib/api"
 
 export function MobileSidebar() {
   const [open, setOpen] = useState(false)
@@ -67,12 +68,40 @@ export function MobileSidebar() {
     [addPdfFiles, toast],
   )
 
-  const handleBuildIndex = () => {
-    setIndexStatus("ready")
+const handleBuildIndex = async () => {
+    if (!pdfFiles.length) {
     toast({
-      title: t("indexBuilt"),
-      description: `Built index "${indexName}" with ${pdfFiles.length} PDF(s)`,
-    })
+      title: "No PDFs Found",
+      description: "Please import PDF files before building the index.",
+      variant: "destructive",});
+    return;
+  }
+  try {
+    const result = await buildIndexAPI(pdfFiles, indexName);
+
+    // Update status and notify user
+    setIndexStatus("ready");
+    toast({
+      title: "Index Built Successfully",
+      description: `Index '${result.index_name}' created with ${result.n_files} files.`,
+    });
+  } catch (error: any) {
+    toast({
+      title: "Error Building Index",
+      description: error.message || "An unknown error occurred.",
+      variant: "destructive",});
+  }
+    // pdfFiles.forEach((file, index) => {
+    //   formData.append(`file${index}`, file);
+    // });
+    // formData.append("indexName", indexName);
+    // console.log("Form Data:", formData); // For debugging purposes
+    
+    // setIndexStatus("ready")
+    // toast({
+    //   title: t("indexBuilt"),
+    //   description: `Built index "${indexName}" with ${pdfFiles.length} PDF(s)`,
+    // })
   }
 
   const handleLoadIndex = () => {
