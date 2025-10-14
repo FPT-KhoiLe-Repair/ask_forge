@@ -13,6 +13,7 @@ import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api"
 
 export function IndexPanel() {
   const {
@@ -73,12 +74,24 @@ export function IndexPanel() {
     [addPdfFiles, toast],
   )
 
-  const handleBuildIndex = () => {
-    setIndexStatus("ready")
-    toast({
-      title: t("indexBuilt"),
-      description: `Built index "${indexName}" with ${pdfFiles.length} PDF(s)`,
+  const handleBuildIndex = async () => {
+    // if (!pdfFiles.length) return;
+    const formData = new FormData();
+    const data = await fetch('http://127.0.0.1:8000/api/build_index', {
+      method: 'POST',
+      body: formData
     })
+    // pdfFiles.forEach((file, index) => {
+    //   formData.append(`file${index}`, file);
+    // });
+    // formData.append("indexName", indexName);
+    // console.log("Form Data:", formData); // For debugging purposes
+    
+    // setIndexStatus("ready")
+    // toast({
+    //   title: t("indexBuilt"),
+    //   description: `Built index "${indexName}" with ${pdfFiles.length} PDF(s)`,
+    // })
   }
 
   const handleLoadIndex = () => {
