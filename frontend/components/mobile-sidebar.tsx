@@ -91,19 +91,30 @@ const handleBuildIndex = async () => {
       description: error.message || "An unknown error occurred.",
       variant: "destructive",});
   }
-    // pdfFiles.forEach((file, index) => {
-    //   formData.append(`file${index}`, file);
-    // });
-    // formData.append("indexName", indexName);
-    // console.log("Form Data:", formData); // For debugging purposes
-    
-    // setIndexStatus("ready")
-    // toast({
-    //   title: t("indexBuilt"),
-    //   description: `Built index "${indexName}" with ${pdfFiles.length} PDF(s)`,
-    // })
   }
 
+  const handleAddToIndex = async () => {
+    if (!pdfFiles.length) {
+    toast({
+      title: "No PDFs Found",
+      description: "Please import PDF files before adding to the index.",
+      variant: "destructive",});
+    return;}
+    try {
+      const result = await buildIndexAPI(pdfFiles, indexName);
+      // Update status and notify user
+      setIndexStatus("ready");
+      toast({
+        title: "Files Added to Index Successfully",
+        description: `Added ${result.n_files} files to index '${result.index_name}'.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error Adding to Index",
+        description: error.message || "An unknown error occurred.",
+        variant: "destructive",});
+}
+  }
   const handleLoadIndex = () => {
     setIndexStatus("ready")
     toast({
@@ -192,7 +203,12 @@ const handleBuildIndex = async () => {
                   <FolderOpen className="mr-2 h-4 w-4" />
                   {t("loadSavedIndex")}
                 </Button>
-                <Button variant="outline" size="sm" className="w-full bg-transparent" disabled={pdfFiles.length === 0}>
+                <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full bg-transparent" 
+                disabled={pdfFiles.length === 0}
+                onClick={handleAddToIndex}>
                   <Plus className="mr-2 h-4 w-4" />
                   {t("addToIndex")}
                 </Button>

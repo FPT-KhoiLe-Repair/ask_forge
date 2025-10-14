@@ -34,3 +34,33 @@ export async function buildIndexAPI(pdfFiles: File[], indexName: string): Promis
     throw error; // Propagate the error to the caller
   }
 }
+
+export async function handeleAddToIndexAPI(
+  pdfFiles: File[], indexName: string
+): Promise<any> {
+  const formData = new FormData();
+  
+  // Append files to FormData
+  pdfFiles.forEach((file) => {
+    formData.append("files", file, file.name); // Backend expects "files" as the key
+  });
+  // Append index name
+  formData.append("index_name", indexName);
+  try {
+    const response = await apiFetch("/api/add_to_index", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json;
+      throw new Error(error.detail || "Failed to add to index");
+    }
+
+    return await response.json; // Return the response to the caller
+    
+  } catch (error) {
+    console.error("Error calling handleAddToIndexAPI:", error);
+    throw error; // Propagate the error to the caller
+  }
+}

@@ -14,6 +14,7 @@ import { getTranslation } from "@/lib/translations"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { buildIndexAPI } from "@/lib/api"
+import { Spinner } from "./ui/spinner"
 
 export function IndexPanel() {
   const {
@@ -99,6 +100,28 @@ export function IndexPanel() {
   }
   }
 
+  const handleAddToIndex = async () => {
+    if (!pdfFiles.length) {
+    toast({
+      title: "No PDFs Found",
+      description: "Please import PDF files before adding to the index.",
+      variant: "destructive",});
+    return;}
+    try {
+      const result = await buildIndexAPI(pdfFiles, indexName);
+      setIndexStatus("ready");
+      toast({
+        title: "Added to Index Successfully",
+        description: `Added ${result.n_files} files to index '${result.index_name}'.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error Adding to Index",
+        description: error.message || "An unknown error occurred.",
+        variant: "destructive",
+      });
+    }
+  }
   const handleLoadIndex = () => {
     setIndexStatus("ready")
     toast({
@@ -164,20 +187,25 @@ export function IndexPanel() {
                   />
                 </label>
               </Button>
-              <Button
-                size="sm"
-                className="w-full bg-gradient-primary hover:opacity-90"
-                onClick={handleBuildIndex}
-                disabled={pdfFiles.length === 0}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                {t("buildIndex")}
-              </Button>
+                <Button
+                  size="sm"
+                  className="w-full bg-gradient-primary hover:opacity-90"
+                  onClick={handleBuildIndex}
+                  disabled={pdfFiles.length === 0}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("buildIndex")}
+                </Button>
               <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={handleLoadIndex}>
                 <FolderOpen className="mr-2 h-4 w-4" />
                 {t("loadSavedIndex")}
               </Button>
-              <Button variant="outline" size="sm" className="w-full bg-transparent" disabled={pdfFiles.length === 0}>
+              <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full bg-transparent" 
+              disabled={pdfFiles.length === 0}
+              onClick={handleAddToIndex}>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("addToIndex")}
               </Button>
