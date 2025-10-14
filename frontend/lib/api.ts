@@ -6,61 +6,17 @@ export async function apiFetch<T = any>(path: string, init?: RequestInit) {
   return res.json() as Promise<T>;
 }
 
-export async function buildIndexAPI(pdfFiles: File[], indexName: string): Promise<any> {
+// LƯU Ý: KHÔNG set 'Content-Type' khi gửi FormData
+export async function buildIndexAPI(pdfFiles: File[], indexName: string) {
   const formData = new FormData();
-  
-  // Append files to FormData
-  pdfFiles.forEach((file) => {
-    formData.append("files", file, file.name); // Backend expects "files" as the key
-  });
-
-  // Append index name
+  pdfFiles.forEach((file) => formData.append("files", file, file.name));
   formData.append("index_name", indexName);
-
-  try {
-    const response = await apiFetch("/api/build_index", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json;
-      throw new Error(error.detail || "Failed to build index");
-    }
-
-    return await response.json; // Return the response to the caller
-  } catch (error) {
-    console.error("Error calling buildIndexAPI:", error);
-    throw error; // Propagate the error to the caller
-  }
+  return apiFetch("/api/build_index", { method: "POST", body: formData });
 }
 
-export async function handeleAddToIndexAPI(
-  pdfFiles: File[], indexName: string
-): Promise<any> {
+export async function addToIndexAPI(pdfFiles: File[], indexName: string) {
   const formData = new FormData();
-  
-  // Append files to FormData
-  pdfFiles.forEach((file) => {
-    formData.append("files", file, file.name); // Backend expects "files" as the key
-  });
-  // Append index name
+  pdfFiles.forEach((file) => formData.append("files", file, file.name));
   formData.append("index_name", indexName);
-  try {
-    const response = await apiFetch("/api/add_to_index", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json;
-      throw new Error(error.detail || "Failed to add to index");
-    }
-
-    return await response.json; // Return the response to the caller
-    
-  } catch (error) {
-    console.error("Error calling handleAddToIndexAPI:", error);
-    throw error; // Propagate the error to the caller
-  }
+  return apiFetch("/api/add_to_index", { method: "POST", body: formData });
 }

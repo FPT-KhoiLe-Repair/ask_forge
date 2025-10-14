@@ -15,7 +15,8 @@ import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
-import { buildIndexAPI } from "@/lib/api"
+import { buildIndexAPI, addToIndexAPI } from "@/lib/api"
+import { Spinner } from "@/components/ui/spinner"
 
 export function MobileSidebar() {
   const [open, setOpen] = useState(false)
@@ -23,6 +24,10 @@ export function MobileSidebar() {
     useStore()
   const { toast } = useToast()
   const [isDragging, setIsDragging] = useState(false)
+
+  const [isLoadingBuild, setIsLoadingBuild] = useState(false)
+  const [isLoadingAdd, setIsLoadingAdd] = useState(false)
+
   const t = (key: Parameters<typeof getTranslation>[1]) => getTranslation(language, key)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -77,8 +82,9 @@ const handleBuildIndex = async () => {
     return;
   }
   try {
+    setIsLoadingBuild(true);
     const result = await buildIndexAPI(pdfFiles, indexName);
-
+    setIsLoadingBuild(false);
     // Update status and notify user
     setIndexStatus("ready");
     toast({
@@ -101,7 +107,9 @@ const handleBuildIndex = async () => {
       variant: "destructive",});
     return;}
     try {
+      setIsLoadingAdd(true);
       const result = await buildIndexAPI(pdfFiles, indexName);
+      setIsLoadingAdd(false);
       // Update status and notify user
       setIndexStatus("ready");
       toast({
@@ -196,7 +204,7 @@ const handleBuildIndex = async () => {
                   onClick={handleBuildIndex}
                   disabled={pdfFiles.length === 0}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
+                  {isLoadingBuild ? <Spinner className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
                   {t("buildIndex")}
                 </Button>
                 <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={handleLoadIndex}>
@@ -209,7 +217,7 @@ const handleBuildIndex = async () => {
                 className="w-full bg-transparent" 
                 disabled={pdfFiles.length === 0}
                 onClick={handleAddToIndex}>
-                  <Plus className="mr-2 h-4 w-4" />
+                  {isLoadingAdd ? <Spinner className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
                   {t("addToIndex")}
                 </Button>
               </div>

@@ -13,8 +13,10 @@ import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
-import { buildIndexAPI } from "@/lib/api"
-import { Spinner } from "./ui/spinner"
+import { buildIndexAPI, addToIndexAPI } from "@/lib/api"
+
+import { Spinner } from "@/components/ui/spinner"
+
 
 export function IndexPanel() {
   const {
@@ -30,6 +32,10 @@ export function IndexPanel() {
   } = useStore()
   const { toast } = useToast()
   const [isDragging, setIsDragging] = useState(false)
+
+  const [isLoadingBuild, setIsLoadingBuild] = useState(false)
+  const [isLoadingAdd, setIsLoadingAdd] = useState(false)
+  
   const t = (key: Parameters<typeof getTranslation>[1]) => getTranslation(language, key)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -84,8 +90,11 @@ export function IndexPanel() {
     return;
   }
   try {
+    setIsLoadingBuild(true);
     const result = await buildIndexAPI(pdfFiles, indexName);
-
+    setIndexStatus("ready");
+    setIsLoadingBuild(false);
+    
     // Update status and notify user
     setIndexStatus("ready");
     toast({
@@ -108,7 +117,9 @@ export function IndexPanel() {
       variant: "destructive",});
     return;}
     try {
-      const result = await buildIndexAPI(pdfFiles, indexName);
+      setIsLoadingAdd(true);
+      const result = await addToIndexAPI(pdfFiles, indexName);
+      setIsLoadingAdd(false);
       setIndexStatus("ready");
       toast({
         title: "Added to Index Successfully",
@@ -191,9 +202,9 @@ export function IndexPanel() {
                   size="sm"
                   className="w-full bg-gradient-primary hover:opacity-90"
                   onClick={handleBuildIndex}
-                  disabled={pdfFiles.length === 0}
+                  disabled={pdfFiles.length === 0 || isLoadingBuild}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
+                  {isLoadingBuild ? <Spinner className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
                   {t("buildIndex")}
                 </Button>
               <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={handleLoadIndex}>
@@ -206,7 +217,7 @@ export function IndexPanel() {
               className="w-full bg-transparent" 
               disabled={pdfFiles.length === 0}
               onClick={handleAddToIndex}>
-                <Plus className="mr-2 h-4 w-4" />
+                {isLoadingAdd ? <Spinner className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
                 {t("addToIndex")}
               </Button>
             </div>

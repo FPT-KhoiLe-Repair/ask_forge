@@ -12,68 +12,57 @@ import os, json
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 
+
 async def extract_all_chunks(
-    files: List[UploadFile],
-    splitter: RecursiveCharacterTextSplitter,
-    min_chars: int,
-    make_chunk_id: Optional[callable] = None,
+        files: List[UploadFile],
+        splitter: RecursiveCharacterTextSplitter,
+        min_chars: int,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
-    """
-    Đọc danh sách UploadFile (PDF), split theo splitter, lọc theo min_chars,
-    trả về (all_chunks, metrics).
-
-    all_chunks: [
-      {"source": "<original filename>", "content": [
-         {"text": "...", "page": 1-based, "chunk_id": "..."}, ...
-      ]},
-      ...
-    ]
-
-    metrics: {"total_pages": int, "total_raw_chunks": int, "kept_chunks_after_min_chars": int}
-    """
-
     all_chunks: List[Dict[str, Any]] = []
     total_pages = 0
     total_raw_chunks = 0
-
-    # chunk_id mặc định: <stem>-<page>-<i> để tránh trùng giữa nhiều file
-    def _default_chunk_id(source_name: str, page1: int, i: int) -> str:
-        stem = Path(source_name).stem
-        return f"{stem}_{page1}_{i}"
-
-    make_chunk_id = make_chunk_id or _default_chunk_id
 
     for uf in files:
         suffix = ".pdf" if not uf.filename.lower().endswith(".pdf") else ""
         tmp_path = None
 
         try:
-            # Lưu file upload ra file tạm (Windows cần delete=False để loader có thể mở)
+            # 1️⃣ Lưu file tạm
             with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(await uf.read())
                 tmp_path = tmp.name
 
-            # Load mỗi trang thành 1 Document
+            # 2️⃣ Load PDF → docs
             loader = PyPDFLoader(tmp_path)
             docs = loader.load()
             total_pages += len(docs)
 
-            # Split
+            # 3️⃣ Split thành chunks
             raw_chunks = splitter.split_documents(docs)
             total_raw_chunks += len(raw_chunks)
 
-            # Lọc theo min_chars
+            # 4️⃣ Lọc theo min_chars
             kept = [c for c in raw_chunks if len((c.page_content or "").strip()) >= min_chars]
 
-            # Chuẩn hoá content
+            # 5️⃣ Tạo content list có chunk_id theo thứ tự
             contents = []
-            for i, c in enumerate(kept):
+            # Tạo counter cho từng page
+            page_counters: Dict[int, int] = {}
+
+            for c in kept:
                 page0 = c.metadata.get("page", 0)
-                page1 = int(page0) + 1  # 1-based cho dễ đọc
+                page1 = int(page0) + 1  # 1-based index
+
+                # Đếm chunk theo page
+                page_counters[page1] = page_counters.get(page1, 0) + 1
+                chunk_num = page_counters[page1]
+
+                chunk_id = f"p{page1}_c{chunk_num}"
+
                 contents.append({
                     "text": c.page_content,
                     "page": page1,
-                    "chunk_id": make_chunk_id(uf.filename, page1, i),
+                    "chunk_id": chunk_id
                 })
 
             all_chunks.append({
@@ -82,7 +71,6 @@ async def extract_all_chunks(
             })
 
         finally:
-            # Xoá file tạm nếu có
             if tmp_path and os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
@@ -130,7 +118,7 @@ async def hello():
 
 CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 300
-MIN_CHARS = 100
+MIN_CHARS = 300
 PAGES_JSON_PATH = "D:/Works/AskForge/downstream/Experiments/datas/"
 
 @app.post("/api/build_index")
@@ -199,7 +187,7 @@ async def add_to_index(
         # tuỳ yêu cầu: có thể merge với pages.json cũ hoặc ghi file riêng
         # ví dụ merge:
         try:
-            with open(PAGES_JSON_PATH, "r", encoding="utf-8") as f:
+            with open(PAGES_JSON_PATH + f"{index_name}.json", "r", encoding="utf-8") as f:
                 old = json.load(f)
         except FileNotFoundError:
             old = []
@@ -216,6 +204,7 @@ async def add_to_index(
             },
         )
     except Exception as e:
+        print(e)
         return JSONResponse(status_code=500, content={"detail": f"Internal Server Error: {str(e)}"})
 
 
