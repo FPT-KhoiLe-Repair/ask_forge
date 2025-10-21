@@ -112,7 +112,7 @@ const handleBuildIndex = async () => {
       setIsLoadingAdd(false);
       // Update status and notify user
       setIndexStatus("ready");
-      toast({
+      toast({  
         title: "Files Added to Index Successfully",
         description: `Added ${result.n_files} files to index '${result.index_name}'.`,
       });
@@ -202,7 +202,7 @@ const handleBuildIndex = async () => {
                   size="sm"
                   className="w-full bg-gradient-primary hover:opacity-90"
                   onClick={handleBuildIndex}
-                  disabled={pdfFiles.length === 0}
+                  disabled={pdfFiles.length === 0 || isLoadingBuild}
                 >
                   {isLoadingBuild ? <Spinner className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
                   {t("buildIndex")}
@@ -215,7 +215,7 @@ const handleBuildIndex = async () => {
                 variant="outline" 
                 size="sm" 
                 className="w-full bg-transparent" 
-                disabled={pdfFiles.length === 0}
+                disabled={pdfFiles.length === 0 || isLoadingAdd}
                 onClick={handleAddToIndex}>
                   {isLoadingAdd ? <Spinner className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
                   {t("addToIndex")}

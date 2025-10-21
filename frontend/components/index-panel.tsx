@@ -215,7 +215,7 @@ export function IndexPanel() {
               variant="outline" 
               size="sm" 
               className="w-full bg-transparent" 
-              disabled={pdfFiles.length === 0}
+              disabled={pdfFiles.length === 0 || isLoadingAdd}
               onClick={handleAddToIndex}>
                 {isLoadingAdd ? <Spinner className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
                 {t("addToIndex")}
