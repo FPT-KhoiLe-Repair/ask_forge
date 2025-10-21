@@ -4,7 +4,7 @@ import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any
 from tempfile import NamedTemporaryFile
 import os, json
 
@@ -95,8 +95,6 @@ def write_pages_json(all_chunks: List[Dict[str, Any]], out_path: str) -> None:
         json.dump(all_chunks, f, ensure_ascii=False, indent=2)
 
 
-
-
 app = FastAPI()
 
 app.add_middleware(
@@ -104,6 +102,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://192.168.11.154:3000",
+        "http://10.10.10.237:3000"
     ],
 
     allow_credentials=True,
@@ -119,7 +118,7 @@ async def hello():
 CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 300
 MIN_CHARS = 300
-PAGES_JSON_PATH = "D:/Works/AskForge/downstream/Experiments/datas/"
+PAGES_JSON_PATH = "/downstream/Experiments/user_db/"
 
 @app.post("/api/build_index")
 async def build_index(

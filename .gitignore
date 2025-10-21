@@ -1,0 +1,81 @@
+# ========================
+# GLOBAL IGNORE
+# ========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.db
+*.sqlite3
+*.log
+*.DS_Store
+*.env
+*.env.*
+*.local
+*.bak
+*.tmp
+*.swp
+*.idea/
+.vscode/
+
+# ========================
+# BACKEND (Python / FastAPI)
+# ========================
+/backend/__pycache__/
+/backend/.pytest_cache/
+/backend/.mypy_cache/
+/backend/.ruff_cache/
+/backend/.venv/
+/backend/venv/
+/backend/env/
+/backend/*.log
+/backend/.env*
+/backend/data/
+/backend/chroma_indexes/
+/backend/tmp/
+/backend/.coverage
+/backend/htmlcov/
+/backend/.pytest_cache/
+/backend/.DS_Store
+
+# ========================
+# FRONTEND (Next.js / React)
+# ========================
+/frontend/node_modules/
+/frontend/.next/
+/frontend/out/
+/frontend/build/
+/frontend/.vercel/
+/frontend/.turbo/
+/frontend/dist/
+/frontend/.cache/
+/frontend/.env*
+/frontend/yarn-error.log
+/frontend/yarn-debug.log*
+/frontend/npm-debug.log*
+/frontend/pnpm-debug.log*
+/frontend/package-lock.json
+/frontend/.DS_Store
+
+# ========================
+# PROJECT LEVEL
+# ========================
+.env
+.env.*
+node_modules/
+*.lock
+.DS_Store
+.vscode/
+.idea/
+logs/
+tmp/
+cache/
+
+# ========================
+# OPTIONAL: Ignore output / generated JSONs
+# ========================
+/backend/output/
+/backend/generated/
+/backend/*.json
+/frontend/public/generated/
