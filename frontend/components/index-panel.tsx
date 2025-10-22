@@ -13,7 +13,7 @@ import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
-import { buildIndexAPI, addToIndexAPI } from "@/lib/api"
+import { buildIndexAPI, addToIndexAPI } from "@/app/api/indexing"
 
 import { Spinner } from "@/components/ui/spinner"
 

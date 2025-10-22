@@ -1,4 +1,4 @@
-import { API_BASE } from "./config";
+import { API_BASE } from "../../lib/config";
 
 export async function apiFetch<T = any>(path: string, init?: RequestInit) {
   const res = await fetch(`${API_BASE}${path}`, init);
