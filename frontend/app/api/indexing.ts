@@ -19,4 +19,4 @@ export async function addToIndexAPI(pdfFiles: File[], indexName: string) {
   pdfFiles.forEach((file) => formData.append("files", file, file.name));
   formData.append("index_name", indexName);
   return apiFetch("/api/add_to_index", { method: "POST", body: formData });
-}
+} 

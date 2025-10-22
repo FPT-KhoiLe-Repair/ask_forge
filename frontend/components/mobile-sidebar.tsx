@@ -108,7 +108,7 @@ const handleBuildIndex = async () => {
     return;}
     try {
       setIsLoadingAdd(true);
-      const result = await buildIndexAPI(pdfFiles, indexName);
+      const result = await addToIndexAPI(pdfFiles, indexName);
       setIsLoadingAdd(false);
       // Update status and notify user
       setIndexStatus("ready");

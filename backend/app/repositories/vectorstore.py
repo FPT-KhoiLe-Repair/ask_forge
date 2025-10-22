@@ -1,33 +1,16 @@
-from typing import List, Dict, Any
+"""
+Updated ChromaRepo với query methods cho chat.
+"""
+from typing import List, Dict, Any, Optional
 from chromadb import PersistentClient
 from chromadb.utils import embedding_functions
 from ask_forge.backend.app.core.config import settings
 
 class ChromaRepo:
     """
-    A repository class that manages ChromaDB collections, embeddings, and document upserts.
+    Repository class quản lý ChromaDB collections, embeddings, và queries.
 
-    This class provides a clean abstraction layer over Chroma’s `PersistentClient` API,
-    allowing AskForge’s backend to create, store, and retrieve vector embeddings for text chunks.
-    It automatically handles embedding generation using a specified SentenceTransformer model
-    and organizes collections by consistent naming conventions.
-
-    Attributes:
-        client (PersistentClient):
-            Persistent Chroma client pointing to a directory defined in settings.
-        embedder (SentenceTransformerEmbeddingFunction):
-            Embedding function used to convert text chunks into vector embeddings.
-
-    Example:
-        >>> repo = ChromaRepo()
-        >>> chunks = [
-        ...     {"src": "chapter1.pdf", "content": [
-        ...         {"text": "Economic systems evolved...", "page": 1, "chunk_id": "p1_c1"},
-        ...         {"text": "Adam Smith introduced...", "page": 2, "chunk_id": "p2_c1"},
-        ...     ]}
-        ... ]
-        >>> repo.upsert("econ101", chunks)
-        >>> print("Data successfully indexed into ChromaDB.")
+    Được khởi tạo 1 lần duy nhất trong AppState (singleton pattern).
     """
 
     def __init__(self):
@@ -91,7 +74,28 @@ class ChromaRepo:
             embedding_function=self.embedder,
             metadata={"hnsw:space": "cosine"},
         )
+    # New methods, MUST CHECK
+    def get_collection(self, index_name: str):
+        """
+        Get existing collection (không tạo mới).
 
+        Raises:
+            ValueError: Nếu collection không tồn tại
+        """
+        try:
+            return self.client.get_collection(
+                name=self._collection_name(index_name),
+                embedding_function=self.embedder,
+            )
+        except Exception as e:
+            raise ValueError(f"Collection '{index_name}' does not exist: {e}")
+    def list_collections(self):
+        """List tất cả các collection hiện có."""
+        return self.client.list_collections()
+
+    def delete_collection(self, index_name: str):
+        """Xóa collection."""
+        self.client.delete_collection(name=self._collection_name(index_name))
     # ------------------------------------------------------------
     # Data Upsertion
     # ------------------------------------------------------------
@@ -150,3 +154,111 @@ class ChromaRepo:
                 # Future extension: Add metadata such as topics, tags, difficulty, etc.
 
         col.upsert(ids=ids, documents=docs, metadatas=metadatas)
+    # ------------------------------------------------------------
+    # Query & Search (CHO CHAT) (New, must check)
+    # ------------------------------------------------------------
+    def query(self,
+              index_name: str,
+              query_text: str,
+              n_results: int = 5,
+              where: Optional[str] = None,
+              where_document: Optional[str] = None
+    )-> Dict[str, Any]:
+        """
+        Query vector database để tìm chunks tương tự.
+
+        Args:
+            index_name: Tên index cần query
+            query_text: User query (tự động embedding)
+            n_results: Số lượng kết quả trả về (top-k)
+            where: Filter theo metadata (e.g., {"source": "file.pdf"})
+            where_document: Filter theo nội dung document
+
+        Returns:
+            Dict chứa:
+                - ids: List[List[str]] - IDs của chunks
+                - documents: List[List[str]] - Nội dung chunks
+                - metadatas: List[List[Dict]] - Metadata
+                - distances: List[List[float]] - Cosine distances
+
+        Example:
+            >>> repo.query(
+            ...     "econ101",
+            ...     "What is supply and demand?",
+            ...     n_results=3
+            ... )
+        """
+        col = self.get_collection(index_name)
+
+        results = col.query(
+            query_texts=[query_text],
+            n_results=n_results,
+            where=where,
+            where_document=where_document,
+        )
+
+        return results
+
+    def get_context_for_chat(self,
+                             index_name: str,
+                             query_text: str,
+                             n_results: int = 5,
+                             min_relevance: float = 0.5,
+    ) -> List[Dict[str, Any]]:
+        """
+        Helper method để lấy context chunks cho chat/RAG.
+
+        Returns:
+            List of dicts, mỗi dict chứa:
+                - text: Nội dung chunk
+                - source: File source
+                - page: Page number
+                - chunk_id: Chunk ID
+                - score: Relevance score (1 - distance)
+
+        Example:
+            >>> contexts = repo.get_context_for_chat("econ101", "What is GDP?")
+            >>> for ctx in contexts:
+            ...     print(f"Page {ctx['page']}: {ctx['text'][:100]}...")
+        """
+        results = self.query(
+            index_name=index_name,
+            query_text=query_text,
+            n_results=n_results,
+        )
+
+        # Flatten results
+        contexts = []
+        for i in range(len(results['ids'][0])):
+            distance = results['distances'][0][i]
+            score = 1 - distance # Convert distance to similarity score
+
+            # Filter by minimum relevance
+            if score < min_relevance:
+                continue
+
+            contexts.append({
+                'text': results['documents'][0][i],
+                'source': results['metadatas'][0][i]['source'],
+                'page': results['metadatas'][0][i]['page'],
+                'chunk_id': results['metadatas'][0][i]['chunk_id'],
+                'score': round(score, 4),
+            })
+        return contexts
+
+    def get_collection_stats(self, index_name: str) -> Dict[str, Any]:
+        """
+        Lấy thống kê về collection.
+
+        Returns:
+            Dict chứa:
+                - count: Số lượng chunks
+                - name: Tên collection
+                - metadata: Collection metadata
+        """
+        col = self.get_collection(index_name)
+        return {
+            'count': col.count(),
+            'name': col.name,
+            'metadata': col.metadata,
+        }
