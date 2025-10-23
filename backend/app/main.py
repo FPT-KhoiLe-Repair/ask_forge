@@ -9,7 +9,7 @@ from ask_forge.backend.app.core.config import settings
 from ask_forge.backend.app.core.logging import setup_logging
 from ask_forge.backend.app.core.app_state import lifespan_manager
 from ask_forge.backend.app.api.routes.index_routes import router as index_router
-
+from ask_forge.backend.app.api.routes.chat_routes import router as chat_router
 # Setup Loggin
 setup_logging()
 
@@ -45,6 +45,7 @@ async def health_check():
         "loaded_models": list(app_state.loaded_models.keys()),
     }
 app.include_router(index_router)
+app.include_router(chat_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

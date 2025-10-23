@@ -30,13 +30,12 @@ __pycache__/
 /backend/venv/
 /backend/env/"
 /backend/*.log
-/backend/.env*
+/backend/app/services/llm/.env.local
 /backend/data/
 /backend/chroma_indexes/
 /backend/tmp/
 /backend/.coverage
 /backend/htmlcov/
-/backend/.pytest_cache/
 /backend/.DS_Store
 
 # ========================

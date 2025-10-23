@@ -30,9 +30,14 @@ async def build_index_ep(
         return (JSONResponse
                 (status_code=400,
                  content={"ok": False, "error": "No files provided"}))
-
-    all_chunks, metrics = await build_index(files, index_name, repo)
-
+    try:
+        all_chunks, metrics = await build_index(files, index_name, repo)
+    except Exception as e:
+        print(e)
+        return (JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(e)}
+        ))
     state.register_index(index_name)
 
     return BuildIndexResponse(

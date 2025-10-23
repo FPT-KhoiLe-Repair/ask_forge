@@ -7,8 +7,9 @@ DEFAULT_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 @lru_cache(maxsize=1)
 def get_gemini_client() -> genai.Client:
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
+    # load_dotenv("./.env")
+    # api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = "AIzaSyD-2l71SRihM6M65yOZqh_dWRhVZ8OxohI"
     if not api_key:
         raise RuntimeError("Missing Gemini API key")
     return genai.Client(api_key=api_key)

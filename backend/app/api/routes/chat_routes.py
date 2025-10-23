@@ -16,33 +16,32 @@ from ask_forge.backend.app.services.llm.gemini_client import (
 from ask_forge.backend.app.services.rag_service import (
     build_chat_prompt, answer_once_gemini, stream_answer_gemini
 )
-
+from ask_forge.backend.app.utils.naming import format_index_name
 router = APIRouter(
-    prefix="/api/chat",
+    prefix="/api",
     tags=["chat"],
 )
+
+class ChatBody(BaseModel):
+    query_text: str = Field(..., description="Câu hỏi của người dùng")
+    index_name: str = Field(..., description="Index name của Chroma")
 
 # TODO: rewrite the chat, this is just a sample usage of get_context_for_chat
 @router.post("/chat")
 async def chat(
-        query_text: str = Query(..., description="Câu hỏi của người dùng"),
-        index_name: str = Query(..., description="Tên index Chroma"),
+        chat_body: ChatBody, # Đây sẽ là JSON type
         repo: ChromaRepo = Depends(get_chroma_repo)  # Inject singleton
 ):
-
+    index_name = chat_body.index_name
+    query_text = chat_body.query_text
+    index_name = format_index_name(index_name)
     try:
         contexts = repo.get_context_for_chat(
             index_name=index_name,
             query_text=query_text,
             n_results=3,
-            min_relevance=0.7
+            min_relevance=0.5
         )
-
-        # Contexts rỗng
-        if not contexts:
-            msg = ("Không tìm thấy đonạ context liên quan. "
-                   "Hãy thử câu hỏi khác hoặc nạp thêm tài liệu cho index này")
-            return JSONResponse(status_code=400, content={"ok": False, "error": msg})
 
         # 2. Build prompt (giới hạn 3 chunk tốt nhất)
         prompt = build_chat_prompt(query_text=query_text, contexts=contexts)
@@ -63,13 +62,14 @@ async def chat(
                     "page": c.get("page"),
                     "chunk_id": c.get("chunk_id"),
                     "score": c.get("score"),
-                    "preview": c.get("text", "")[:240]
+                    "preview": c.get("text", "")
                 } for c in contexts
             ],
             "model": model_name
         }
 
     except Exception as e:
+        print(e)
         return JSONResponse(
             status_code=500,
             content={"ok": False,
@@ -77,10 +77,12 @@ async def chat(
         )
 @router.post("/chat/stream")
 async def chat_stream(
-        query_text:str,
-        index_name: str,
+        chat_body: ChatBody, # Đây sẽ là JSON type
         repo: ChromaRepo = Depends(get_chroma_repo),
 ):
+    index_name = chat_body.index_name
+    query_text = chat_body.query_text
+    index_name = format_index_name(index_name)
     """Endpoint streaming (có thể bật sau). Frontend sẽ nhận text dần dần."""
     # Lấy context & prompt như non-stream
     contexts = repo.get_context_for_chat(
