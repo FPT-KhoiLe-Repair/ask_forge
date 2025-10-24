@@ -80,7 +80,7 @@ async def load_index_ep(
     data = load_index(index_name)
     return {"ok": True, "index_name": index_name, "data": data}
 
-@router.get("/indexes")
+@router.get("/active_indexes")
 async def list_indexes(
         state: AppState = Depends(get_app_state),
 ):
@@ -91,7 +91,7 @@ async def list_indexes(
     """
     return {
         "ok": True,
-        "indexes": list(state.active_indexes),
+        "active_indexes": list(state.active_indexes),
         "count": len(state.active_indexes),
     }
 

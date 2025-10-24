@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
-import { MobileSidebar } from "@/components/mobile-sidebar"
+import { MobileSidebar }  from "@/components/mobile-sidebar"
 
 export function Topbar() {
   const { language, isDarkMode, setLanguage, toggleDarkMode } = useStore()

@@ -1,19 +1,20 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, use } from "react"
 import { Upload, FolderOpen, Plus, Trash2, FileText, PanelLeftClose, LibraryBig } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
-import { buildIndexAPI, addToIndexAPI } from "@/app/api/indexing"
+import { buildIndexAPI, addToIndexAPI, getActiveIndexesAPI } from "@/app/api/indexing"
 
 import { Spinner } from "@/components/ui/spinner"
 
@@ -29,14 +30,35 @@ export function IndexPanel() {
     leftOpen,
     setLeftOpen,
     setIndexStatus,
+    activeIndexes,
+    setActiveIndexes,
   } = useStore()
   const { toast } = useToast()
   const [isDragging, setIsDragging] = useState(false)
 
   const [isLoadingBuild, setIsLoadingBuild] = useState(false)
   const [isLoadingAdd, setIsLoadingAdd] = useState(false)
+  const [showBuildDialog, setShowBuildDialog] = useState(false)
+  const [newIndexName, setNewIndexName] = useState("")
+  const [buildError, setBuildError] = useState("")
   
   const t = (key: Parameters<typeof getTranslation>[1]) => getTranslation(language, key)
+
+  // Fetch active indexes on mount
+  useEffect(() => {
+    const fetchIndexes = async () => {
+      try {
+        const result = await getActiveIndexesAPI()
+        setActiveIndexes(result.active_indexes)
+        if (result.active_indexes.length > 0 && !indexName) {
+          setIndexName(result.active_indexes[0])
+        }
+      } catch (error) {
+        console.error("Failed to fetch active indexes:", error)
+      }
+    }
+    fetchIndexes()
+  }, [setActiveIndexes, setIndexName, indexName])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -81,33 +103,53 @@ export function IndexPanel() {
     [addPdfFiles, toast],
   )
 
-  const handleBuildIndex = async () => {
+  const handleBuildIndexClick = async () => {
     if (!pdfFiles.length) {
-    toast({
-      title: "No PDFs Found",
-      description: "Please import PDF files before building the index.",
-      variant: "destructive",});
+      toast({
+        title: "No PDFs Found",
+        description: "Please import PDF files before building the index.",
+        variant: "destructive",});
+      return;
+    }
+    setShowBuildDialog(true);
+    setIndexName("");
+    setBuildError("");
+  }
+
+const handleBuildIndexConfirm = async () => {
+  const trimmedName = newIndexName.trim();
+  if (!trimmedName) {
+    setBuildError("Index name cannot be empty.");
+    return;
+  }
+ 
+  if (activeIndexes.includes(trimmedName)) {
+    setBuildError("Index name already exists. Please choose a different name.");
     return;
   }
   try {
     setIsLoadingBuild(true);
-    const result = await buildIndexAPI(pdfFiles, indexName);
-    setIndexStatus("ready");
+    const result = await buildIndexAPI(pdfFiles, trimmedName);
     setIsLoadingBuild(false);
-    
-    // Update status and notify user
+    setShowBuildDialog(false);
+
+    // Update active indexes and set as current
+    setActiveIndexes([...activeIndexes, result.index_name]);
+    setIndexName(result.index_name);
     setIndexStatus("ready");
     toast({
       title: "Index Built Successfully",
       description: `Index '${result.index_name}' created with ${result.n_files} files.`,
     });
   } catch (error: any) {
+    setIsLoadingBuild(false);
     toast({
       title: "Error Building Index",
       description: error.message || "An unknown error occurred.",
-      variant: "destructive",});
+      variant: "destructive",
+    });
   }
-  }
+}
 
   const handleAddToIndex = async () => {
     if (!pdfFiles.length) {
@@ -137,7 +179,7 @@ export function IndexPanel() {
     setIndexStatus("ready")
     toast({
       title: language === "en" ? "Index Loaded" : "Đã tải chỉ mục",
-      description: language === "en" ? `Loaded saved index "${indexName}"` : `Đã tải chỉ mục "${indexName}"`,
+      description: language === "en" ? `Loaded index "${indexName}"` : `Đã tải chỉ mục "${indexName}"`,
     })
   }
 
@@ -149,6 +191,7 @@ export function IndexPanel() {
   }
 
   return (
+    <>
     <AnimatePresence mode="wait">
       {leftOpen && (
         <motion.aside
@@ -170,19 +213,30 @@ export function IndexPanel() {
               </Button>
             </div>
 
-            {/* Index Name Input */}
+            {/* Index Name Selection */}
             <div className="space-y-2">
-              <Label htmlFor="index-name" className="text-sm font-medium">
+              <Label htmlFor="index-select" className="text-sm font-medium">
                 {t("indexName")}
               </Label>
-              <Input
-                id="index-name"
-                value={indexName}
-                onChange={(e) => setIndexName(e.target.value)}
-                className="bg-background/80 backdrop-blur-sm"
-              />
+              <Select value={indexName} onValueChange={setIndexName}>
+                <SelectTrigger id="index-select" className="bg-background/80 backdrop-blur-sm">
+                  <SelectValue placeholder="Select an index"></SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {activeIndexes.length > 0 ? (
+                    activeIndexes.map((idx) => (
+                      <SelectItem key={idx} value={idx}>
+                        {idx}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-indexes" disabled>
+                      No indexes available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
-
             <div className="grid grid-cols-2 gap-2">
               <Button variant="outline" size="sm" className="w-full bg-transparent" asChild>
                 <label htmlFor="file-upload" className="cursor-pointer">
@@ -201,13 +255,17 @@ export function IndexPanel() {
                 <Button
                   size="sm"
                   className="w-full bg-gradient-primary hover:opacity-90"
-                  onClick={handleBuildIndex}
+                  onClick={handleBuildIndexClick}
                   disabled={pdfFiles.length === 0 || isLoadingBuild}
                 >
                   {isLoadingBuild ? <Spinner className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
                   {t("buildIndex")}
                 </Button>
-              <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={handleLoadIndex}>
+              <Button variant="outline" 
+                      size="sm" 
+                      className="w-full bg-transparent" 
+                      onClick={handleLoadIndex}
+                      disabled={!activeIndexes.length}>
                 <FolderOpen className="mr-2 h-4 w-4" />
                 {t("loadSavedIndex")}
               </Button>
@@ -269,5 +327,45 @@ export function IndexPanel() {
         </motion.aside>
       )}
     </AnimatePresence>
+
+    {/* Build Index Dialog */}
+      <Dialog open={showBuildDialog} onOpenChange={setShowBuildDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Build New Index</DialogTitle>
+            <DialogDescription>
+              Enter a unique name for your new index. This name cannot match any existing index.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-index-name">Index Name</Label>
+              <Input
+                id="new-index-name"
+                value={newIndexName}
+                onChange={(e) => {
+                  setNewIndexName(e.target.value)
+                  setBuildError("")
+                }}
+                placeholder="Enter index name"
+                className={buildError ? "border-destructive" : ""}
+              />
+              {buildError && (
+                <p className="text-sm text-destructive">{buildError}</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBuildDialog(false)} disabled={isLoadingBuild}>
+              Cancel
+            </Button>
+            <Button onClick={handleBuildIndexConfirm} disabled={isLoadingBuild}>
+              {isLoadingBuild ? <Spinner className="mr-2 h-4 w-4" /> : null}
+              Build Index
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

@@ -7,10 +7,19 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
+import { useEffect, useRef } from "react"
 
 export function ModelThoughtsPanel() {
   const { language, modelThoughts, rightOpen, setRightOpen } = useStore()
   const t = (key: Parameters<typeof getTranslation>[1]) => getTranslation(language, key)
+  const thoughtsEndRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when modelThoughts update
+  useEffect(() => {
+    if (modelThoughts && thoughtsEndRef.current) {
+      thoughtsEndRef.current.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [modelThoughts])
 
   return (
     <AnimatePresence mode="wait">
@@ -33,7 +42,7 @@ export function ModelThoughtsPanel() {
             </Button>
           </div>
 
-          <Card className="flex-1 rounded-2xl border-border bg-muted/30 backdrop-blur-sm">
+          <Card className="flex-1 rounded-2xl border-border bg-muted/30 backdrop-blur-sm overflow-hidden">
             <ScrollArea className="h-full p-4">
               {modelThoughts ? (
                 <div className="space-y-2">
@@ -42,6 +51,7 @@ export function ModelThoughtsPanel() {
                       {paragraph}
                     </div>
                   ))}
+                  <div ref={thoughtsEndRef} />
                 </div>
               ) : (
                 <div className="flex h-full items-center justify-center text-center">

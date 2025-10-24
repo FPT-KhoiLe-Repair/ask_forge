@@ -34,6 +34,10 @@ interface AppState {
   addPdfFiles: (files: File[]) => void
   clearPdfFiles: () => void
 
+  // Active Indexes
+  activeIndexes: string[]
+  setActiveIndexes: (indexes: string[]) => void
+
   // Chat
   messages: Message[]
   addMessage: (message: Omit<Message, "id" | "timestamp">) => void
@@ -71,6 +75,10 @@ export const useStore = create<AppState>()(
       addPdfFiles: (files) => set((state) => ({ pdfFiles: [...state.pdfFiles, ...files] })),
       clearPdfFiles: () => set({ pdfFiles: [], indexStatus: "idle" }),
 
+      // Active Indexes
+      activeIndexes: [],
+      setActiveIndexes: (indexes) => set({ activeIndexes: indexes }),
+      
       // Chat
       messages: [],
       addMessage: (message) =>
