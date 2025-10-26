@@ -30,6 +30,7 @@ class ChromaRepo:
         self.embedder = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=settings.EMBEDDING_MODEL,
         )
+        self._colletions: dict[str, Any] = {}
 
     # ------------------------------------------------------------
     # Internal helpers

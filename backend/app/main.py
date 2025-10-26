@@ -1,6 +1,8 @@
 """
 FastAPI main app với lifespan management.
 """
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -10,6 +12,7 @@ from ask_forge.backend.app.core.logging import setup_logging
 from ask_forge.backend.app.core.app_state import lifespan_manager
 from ask_forge.backend.app.api.routes.index_routes import router as index_router
 from ask_forge.backend.app.api.routes.chat_routes import router as chat_router
+
 # Setup Loggin
 setup_logging()
 
