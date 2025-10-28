@@ -1,31 +1,5 @@
-"""
-Documented Pydantic models for representing document chunks and indexing responses.
+# BuildIndexResponse, Metrics, AddToIndexResponse
 
-This module defines:
-- Chunk: a single piece of extracted text with provenance (page and id).
-- DocumentChunks: a group of chunks coming from a single source.
-- Metrics: simple indexing metrics summary.
-- BuildIndexResponse: response model returned after building an index.
-- AddToIndexResponse: extended response for adding files to an existing index.
-
-The models use Field(...) descriptions so their JSON Schema (via .schema() or .schema_json())
-is informative for API docs or validation tooling.
-
-Example usage:
-    python documented_models.py
-
-    # Create objects
-    chunk = Chunk(text="Hello world", page=1, chunk_id="doc1-0")
-    doc = DocumentChunks(source="s3://bucket/doc1.pdf", content=[chunk])
-    metrics = Metrics(total_pages=10, total_raw_chunks=25, kept_chunks_after_min_chars=20)
-    resp = BuildIndexResponse(ok=True, index_name="my-index", total_files="3", message="Index built", metrics=metrics)
-
-    # Serialize
-    print(resp.json(indent=2))
-
-    # Get JSON Schema
-    print(BuildIndexResponse.schema_json(indent=2))
-"""
 from typing import List
 from pydantic import BaseModel, Field
 
