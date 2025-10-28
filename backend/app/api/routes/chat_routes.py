@@ -34,7 +34,7 @@ async def chat(
 ):
     try:
         chat_body.index_name = format_index_name(chat_body.index_name)
-        response = await chat_service.chat_once(body=chat_body)
+        response = await chat_service.chat_with_followup(chat_body)
         return response.model_dump()
     except Exception as e:
         return JSONResponse(status_code=500, content={

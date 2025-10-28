@@ -21,4 +21,5 @@ class ChatResponse(BaseModel):
     ok: bool = True
     answer: str
     contexts: List[ContextChunk] = Field(default_factory=list)
+    followup_questions: List[str]
     model_name: str
