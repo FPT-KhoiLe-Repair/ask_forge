@@ -1,7 +1,7 @@
 """
 Application State Manager - Quản lý lifecycle và global resources.
 
-Singleton pattern để đảm bảo chỉ có 1 instance ChromaDB, Models, etc.
+Singleton pattern để đảm bảo chỉ có 1 instance ChromaDB, checkpoints, etc.
 Khởi tạo khi app startup, cleanup khi shutdown.
 """
 import asyncio
@@ -13,8 +13,15 @@ import logging
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
 from ask_forge.backend.app.core.config import settings
 import os, torch
+from pathlib import Path
+import google.genai as genai
 
 logger = logging.getLogger(__name__)
+
+CORE_DIR = Path(__file__).resolve().parent  # …/backend/app/core
+APP_DIR = CORE_DIR.parent  # …/backend/app
+BACKEND_DIR = APP_DIR.parent  # …/backend
+PROJECT_ROOT = BACKEND_DIR.parent  # …/ask_forge
 
 class AppState:
     """
@@ -55,13 +62,28 @@ class AppState:
         self._constructed = True
         logger.info("AppState constructed")
 
+    @lru_cache(maxsize=None)
+    def ensure_gemini_client(self) -> genai.Client:
+        """
+        Trả về 1 instance google.genai.Client, cache theo process
+        Yêu cầu: settings.GEMINI_API_KEY
+        """
+        api_key = settings.GEMINI_API_KEY
+        if not api_key:
+            raise RuntimeError(("❌ Missing GEMINI_API_KEY in env/.env (core/config.py)"))
+        return genai.Client(api_key=api_key)
+
+    def get_gemini_model_name(self) -> str:
+        """Tên model Gemini mặc định lấy từ settings"""
+        return settings.GEMINI_MODEL_NAME
+
     # ------------------------------
     # HF model: lazy & thread-safe
     # ------------------------------
-    async def ensure_hf_model(self):
+    async def ensure_hf_model(self, model_repo: Optional[str] = "Qwen/Qwen2.5-0.5B"):
         """
         Lazy-load HF CasualLM + tokenizer (non-blocking event-loop).
-        Dùng thread executor để không block loop khi from_pretrained
+        - Nếu không dùng hf repo: dùng Qwen/Qwen2.5-0.5B
         """
         if self._hf_model is not None:
             return self._hf_tok, self._hf_model
@@ -70,40 +92,28 @@ class AppState:
             if self._hf_model is not None:
                 return self._hf_tok, self._hf_model
 
-            ckpt = settings.HF_MODEL_CKPT
-            local_only = settings.HF_LOCAL_ONLY=="1"
-
-            if os.path.isdir(ckpt):
-                local_only = True
-
-            trust_remote = settings.HF_TRUST_REMOTE_CODE== "1"
-            low_cpu_mem = settings.HF_LOW_CPU_MEM== "1"
-
+            qg_ckpt = APP_DIR.joinpath("services","checkpoints","QG_Models")
+            qwen_cpt = qg_ckpt / model_repo
             # dtype/device config
             prefer_bf16 = settings.HF_DTYPE.lower() in {"bf16", "bfloat16"}
             dtype = torch.bfloat16 if prefer_bf16 and torch.cuda.is_available() else "auto"
 
             device_map = settings.HF_DEVICE_MAP
 
-            logger.info("🧠 Loading HF model %s (device_map=%s, dtype=%s)...", ckpt, device_map, dtype)
+            logger.info("🧠 Loading HF model %s (device_map=%s, dtype=%s)...", qg_ckpt, device_map, dtype)
 
             loop = asyncio.get_running_loop()
 
             def _load_sync():
-                # Import nặng để trong hàm -> chỉ import khi cần
                 from transformers import AutoTokenizer, AutoModelForCausalLM
+                # Import nặng để trong hàm -> chỉ import khi cần
                 tok = AutoTokenizer.from_pretrained(
-                    ckpt,
-                    trust_remote_code=trust_remote,
-                    local_files_only=local_only,
+                    qwen_cpt,
                 )
                 model = AutoModelForCausalLM.from_pretrained(
-                    ckpt,
-                    torch_dtype=dtype,
+                    qwen_cpt,
+                    dtype=dtype,
                     device_map=device_map,
-                    low_cpu_mem=low_cpu_mem,
-                    trust_remote_code=trust_remote,
-                    local_files_only=local_only,
                 )
                 return tok, model
         self._hf_tok, self._hf_model = await loop.run_in_executor(None, _load_sync)
@@ -170,7 +180,7 @@ class AppState:
                 # _initialized vẫn False nếu fail
                 raise
 
-            # 2) Load ML Models
+            # 2) Load ML checkpoints
             try:
                 if os.getenv("HF_RELOAD_AT_STARTUP", "0") == "1":
                     await  self.ensure_hf_model()

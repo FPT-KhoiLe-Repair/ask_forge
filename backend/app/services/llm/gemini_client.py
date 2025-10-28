@@ -2,6 +2,7 @@ from functools import lru_cache
 import os
 import google.genai as genai
 from ask_forge.backend.app.core.config import settings
+from ask_forge.backend.app.core.app_state import app_state
 
 @lru_cache(maxsize=1)
 def get_gemini_client() -> genai.Client:

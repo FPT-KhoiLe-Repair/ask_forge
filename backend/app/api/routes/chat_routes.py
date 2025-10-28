@@ -7,120 +7,49 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from ask_forge.backend.app.features.chat.service import ChatService
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
 from ask_forge.backend.app.api.dependencies import get_chroma_repo
 
-from ask_forge.backend.app.services.llm.gemini_client import (
-    get_gemini_client, get_gemini_model_name
-)
 from ask_forge.backend.app.services.rag_service import (
     build_chat_prompt, answer_once_gemini, stream_answer_gemini
 )
 from ask_forge.backend.app.utils.naming import format_index_name
+from ask_forge.backend.app.core.app_state import app_state
+from ask_forge.backend.app.features.chat.schemas import ChatBody
+
 router = APIRouter(
     prefix="/api",
     tags=["chat"],
 )
 
-class ChatBody(BaseModel):
-    query_text: str = Field(..., description="Câu hỏi của người dùng")
-    index_name: str = Field(..., description="Index name của Chroma")
+def get_chat_service(repo: ChromaRepo = Depends(get_chroma_repo)) -> ChatService:
+    return ChatService(repo)
 
 # TODO: rewrite the chat, this is just a sample usage of get_context_for_chat
 @router.post("/chat")
 async def chat(
         chat_body: ChatBody, # Đây sẽ là JSON type
-        repo: ChromaRepo = Depends(get_chroma_repo)  # Inject singleton
+        chat_service: ChatService = Depends(get_chat_service)
 ):
-    index_name = chat_body.index_name
-    query_text = chat_body.query_text
-    index_name = format_index_name(index_name)
     try:
-        contexts = repo.get_context_for_chat(
-            index_name=index_name,
-            query_text=query_text,
-            n_results=3,
-            min_relevance=0.5
-        )
-
-        # 2. Build prompt (giới hạn 3 chunk tốt nhất)
-        prompt = build_chat_prompt(query_text=query_text, contexts=contexts)
-
-        # 3. Call Gemini (non-stream)
-        client = get_gemini_client()
-        model_name = get_gemini_model_name()
-        answer_text = answer_once_gemini(client=client, model=model_name, prompt=prompt) or \
-            "Xin lỗi, mình chưa thể tạo câu trả lời phù hợp từ context hiện có."
-
-        # 4. Return
-        return {
-            "ok": True,
-            "answer": answer_text,
-            "contexts": [
-                {
-                    "source": c.get("source"),
-                    "page": c.get("page"),
-                    "chunk_id": c.get("chunk_id"),
-                    "score": c.get("score"),
-                    "preview": c.get("text", "")
-                } for c in contexts
-            ],
-            "model": model_name
-        }
-
+        chat_body.index_name = format_index_name(chat_body.index_name)
+        response = await chat_service.chat_once(body=chat_body)
+        return response.model_dump()
     except Exception as e:
-        print(e)
-        return JSONResponse(
-            status_code=500,
-            content={"ok": False,
-                     "error": str(e)}
-        )
+        return JSONResponse(status_code=500, content={
+            "ok": False,
+            "error": str(e),
+        })
 @router.post("/chat/stream")
 async def chat_stream(
         chat_body: ChatBody, # Đây sẽ là JSON type
-        repo: ChromaRepo = Depends(get_chroma_repo),
+        chat_service: ChatService = Depends(get_chat_service),
 ):
-    index_name = chat_body.index_name
-    query_text = chat_body.query_text
-    index_name = format_index_name(index_name)
-    """Endpoint streaming (có thể bật sau). Frontend sẽ nhận text dần dần."""
-    # Lấy context & prompt như non-stream
-    contexts = repo.get_context_for_chat(
-        index_name=index_name,
-        query_text=query_text,
-        n_results=3,
-        min_relevance=0.7
-    )
-    prompt = build_chat_prompt(query_text=query_text, contexts=contexts)
-    client = get_gemini_client()
-    model_name = get_gemini_model_name()
-    stream_gen = stream_answer_gemini(client=client, model=model_name, prompt=prompt)
-    return StreamingResponse(stream_gen, media_type="text/plain")
+    chat_body.index_name = format_index_name(chat_body.index_name)
+    gen = chat_service.chat_stream(body=chat_body)
+    return StreamingResponse(gen, media_type="application/octet-stream")
 
 # ============================================================
-# Request/Response Models
+# Request/Response checkpoints
 # ============================================================
-
-class QueryRequest(BaseModel):
-    """Request model cho query/search."""
-    query: str = Field(..., description="User query text")
-    n_results: int = Field(default=5, ge=1, le=20, description="Number of results",)
-    min_relevance: float = Field(default=0.5, ge=0, le=1, description="Minimum relevance source")
-    filter_source: Optional[str] = Field(default=None, description="Filter by source file")
-
-
-class ContextChunk(BaseModel):
-    """Model cho một context chunk."""
-    text: str
-    source: str
-    page: int
-    chunk_id: str
-    score: float
-
-
-class QueryResponse(BaseModel):
-    """Response model cho query."""
-    ok: bool
-    query: str
-    index_name: str
-    contexts: List[ContextChunk]

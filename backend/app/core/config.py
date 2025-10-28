@@ -9,6 +9,7 @@ ENV_PATH = Path(__file__).with_name(".env")  # luôn trỏ tới core/.env
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "AskForge Backend"
+    DEBUG: bool = False
     APP_PREFIX: str = "/api"
 
     # CORS
@@ -29,10 +30,10 @@ class Settings(BaseSettings):
 
     # Gemini (đặt required hoặc có default tuỳ bạn)
     GEMINI_API_KEY: str = Field(min_length=1)  # thiếu sẽ raise
-    GEMINI_MODEL: str = Field(default="gemini-2.5-flash")
+    GEMINI_MODEL_NAME: str = Field(default="gemini-2.5-flash")
 
     # HF
-    HF_QG_CHECKPOINT: str = Field(default="Qwen/Qwen2.5-0.6B")
+    HF_QG_CKPT: str = Field(default="Qwen/Qwen2.5-0.5B")
     HF_LOCAL_ONLY: bool = Field(default=False)
     HF_DEVICE_MAP: str = Field(default="auto")
     HF_DTYPE: str = Field(default="")

@@ -25,8 +25,6 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[str(o) for o in settings.CORS_ORIGINS] or [
         "http://localhost:3000",
-        "http://192.168.11.154:3000",
-        "http://10.10.10.237:3000"
     ],
     allow_credentials=True,
     allow_methods=["*"],

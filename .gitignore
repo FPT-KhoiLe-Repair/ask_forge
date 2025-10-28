@@ -71,6 +71,9 @@ logs/
 tmp/
 cache/
 
+# Ignore Model Files
+/backend/app/services/checkpoints/QG_Models/Qwen/
+
 # ========================
 # OPTIONAL: Ignore output / generated JSONs
 # ========================

@@ -49,7 +49,7 @@ class ChromaRepo:
             >>> repo._collection_name("econ101")
             "askforge_econ101"
         """
-        return f"{settings.CHROMA_COLLECTION_PREFIX}{index_name}"
+        return f"{index_name}"
 
     # ------------------------------------------------------------
     # Collection Management
