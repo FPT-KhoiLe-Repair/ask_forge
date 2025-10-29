@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List, Dict
 
 from ask_forge.backend.app.core.app_state import logger, AppState
-from ask_forge.backend.app.features.qg.service import QGService
+from ask_forge.backend.app.services.qg.service import QGService
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
 from ask_forge.backend.app.services.chat.schemas import ChatBody, ChatResponse, ContextChunk
 from ask_forge.backend.app.services.chat.pipeline import (
@@ -42,7 +42,7 @@ class ChatService:
         )
         logger.info(f"📚 Retrieved {len(contexts)} context chunks")
 
-        # ---- Step 2: Build prompt ----
+        # ---- Step 2: Build prompts ----
         try:
             answer_text, model_name = generate_answer_nonstream(
                 question=body.query_text,
@@ -62,7 +62,6 @@ class ChatService:
                 contexts=contexts,
                 lang=body.lang
             )
-            followup_questions = followup_questions["questions"]
         except Exception as e:
             logger.exception(e)
             followup_questions = []

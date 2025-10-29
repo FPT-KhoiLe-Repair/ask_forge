@@ -13,8 +13,3 @@ Constraints:
 - Avoid repeating the seed question.
 - One question per line, no numbering.
 """
-#     return f"""
-# Answer in {lang}
-# Question: {seed_question}
-# Context: {ctx}
-# Answer:"""

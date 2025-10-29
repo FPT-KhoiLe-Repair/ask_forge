@@ -5,7 +5,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends
 from ask_forge.backend.app.api.dependencies import get_app_state, get_chroma_repo
 from ask_forge.backend.app.core.app_state import AppState
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
-from ask_forge.backend.app.models.indexing.dto import BuildIndexResponse, Metrics
+from ask_forge.backend.app.services.indexing.schemas import BuildIndexResponse, Metrics
 from ask_forge.backend.app.services.indexing.pipeline import build_index, add_to_index, load_index
 from ask_forge.backend.app.utils.naming import format_index_name
 from fastapi.responses import JSONResponse
@@ -74,6 +74,7 @@ async def add_to_index_ep(
         message=f"Index '{index_name}' added successfully",
         metrics=Metrics(**metrics),
     )
+
 @router.get("/load_index", response_model=BuildIndexResponse)
 async def load_index_ep(
         index_name: str = Form(default="default"),

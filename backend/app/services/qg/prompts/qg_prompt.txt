@@ -1,0 +1,10 @@
+Language: {{LANG}}
+
+QUESTION:
+{{QUESTION}}
+
+CONTEXT (top-k snippets):
+{{CONTEXT}}
+
+Generate {{N}} questions.
+Answer:

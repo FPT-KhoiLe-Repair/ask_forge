@@ -4,7 +4,7 @@ from typing import List, Optional
 class ChatBody(BaseModel):
     query_text: str = Field(..., description="Câu hỏi của người dùng")
     index_name: str = Field(..., description="Tên index trong Chroma")
-    lang: str = Field(default="vi", description="Ngôn ngữ đầu ra (vi/en)")
+    lang: str = Field(default="vietnamese", description="Ngôn ngữ đầu ra (vietnamese/english)")
     n_results: int = Field(default=3)
     min_rel: float = Field(default=0.5)
     # TODO: Xử lý lang theo origin_language của query

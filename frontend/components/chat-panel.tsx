@@ -192,7 +192,7 @@ export function ChatPanel() {
     // Add user message
     addMessage({ role: "user", content: userMessage })
 
-    // Open right panel on first prompt
+    // Open right panel on first prompts
     if (!hasSentFirstPrompt) {
       setHasSentFirstPrompt(true)
       if (!rightOpen) setRightOpen(true)
