@@ -61,13 +61,3 @@ class BuildIndexResponse(BaseModel):
     total_files: str = Field(..., description="Number of files processed (string in this model).")
     message: str = Field(..., description="Human-readable status or explanation message.")
     metrics: Metrics = Field(..., description="Metrics summary for the index operation.")
-
-
-class AddToIndexResponse(BuildIndexResponse):
-    """
-    Response returned when adding files to an existing index.
-
-    Inherits all fields from BuildIndexResponse and adds:
-        added_files: count of files that were newly added to the index.
-    """
-    added_files: int = Field(..., ge=0, description="Number of files added to the existing index.")
