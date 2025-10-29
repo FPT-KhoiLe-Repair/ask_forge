@@ -2,29 +2,31 @@
 Updated index routes sử dụng dependencies và AppState.
 """
 from fastapi import APIRouter, UploadFile, File, Form, Depends
+from ask_forge.backend.app.api.dependencies import get_app_state, get_chroma_repo
+from ask_forge.backend.app.core.app_state import AppState
+from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
+from ask_forge.backend.app.models.indexing.dto import BuildIndexResponse, Metrics
+from ask_forge.backend.app.services.indexing.pipeline import build_index, add_to_index, load_index
+from ask_forge.backend.app.utils.naming import format_index_name
 from fastapi.responses import JSONResponse
 from typing import List
 
-from ask_forge.backend.app.services.indexing import build_index, add_to_index, load_index
-from ask_forge.backend.app.models.dto import BuildIndexResponse, Metrics
-from ask_forge.backend.app.api.dependencies import get_chroma_repo, get_app_state
-from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
-from ask_forge.backend.app.core.app_state import AppState
-from ask_forge.backend.app.utils.naming import format_index_name
-router = APIRouter(prefix="/api", tags=["index"])
+# ----------------------------------------------------------------------------------
+
+router = APIRouter(tags=["index"])
 
 @router.post("/build_index", response_model=BuildIndexResponse)
 async def build_index_ep(
         files: List[UploadFile] = File(...),
         index_name: str = Form(default="default"),
+        app_state: AppState = Depends(get_app_state),  # 🔥 Inject state
         repo: ChromaRepo = Depends(get_chroma_repo),  # 🔥 Inject singleton
-        state: AppState = Depends(get_app_state),  # 🔥 Inject state
 ):
     """
         Build index từ uploaded PDFs.
-
         ChromaDB repository được inject tự động từ AppState singleton.
         """
+
     index_name = format_index_name(index_name)
     if not files:
         return (JSONResponse
@@ -33,12 +35,12 @@ async def build_index_ep(
     try:
         all_chunks, metrics = await build_index(files, index_name, repo)
     except Exception as e:
-        print(e)
         return (JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(e)}
         ))
-    state.register_index(index_name)
+
+    app_state.register_index(index_name)
 
     return BuildIndexResponse(
         ok=True,

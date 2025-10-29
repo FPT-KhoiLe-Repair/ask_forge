@@ -19,7 +19,7 @@ export const translations = {
 
     // Chat Panel
     chatTitle: "Chat",
-    typeMessage: "Type your message...",
+    typeMessage: "Ask any thing...",
     send: "Send",
     saveChatHistory: "Save chat history locally",
     promptSuggestions: "Prompt Suggestions",
@@ -51,7 +51,7 @@ export const translations = {
 
     // Chat Panel
     chatTitle: "Trò chuyện",
-    typeMessage: "Nhập tin nhắn của bạn...",
+    typeMessage: "Hỏi bất cứ điều gì...",
     send: "Gửi",
     saveChatHistory: "Lưu lịch sử trò chuyện cục bộ",
     promptSuggestions: "Gợi ý câu hỏi",

@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import List, Dict, Iterable, Tuple
-from ask_forge.backend.app.core.app_state import app_state
+
+from ask_forge.backend.app.core.app_state import AppState
+
 
 def _render_prompt(template: str, *, question:str, contexts: Iterable[Dict], lang: str) -> str:
     joined_ctx = "\n---\n".join(
@@ -27,7 +29,7 @@ def _normalize_contexts(contexts: List[Dict]) -> List[Dict]:
         })
     return normalized_contexts
 
-def answer_once_gemini(*, prompt: str) -> Tuple[str, str]:
+def answer_once_gemini(*, prompt: str, app_state:AppState) -> Tuple[str, str]:
     """
     Trả (answer_text, model_name) bằng Gemini. Dùng AppState để lấy client/model.
     """
@@ -37,7 +39,7 @@ def answer_once_gemini(*, prompt: str) -> Tuple[str, str]:
     text = getattr(response, "text", "") or ""
     return text.strip(), model_name
 
-def stream_answer_gemini(*, prompt:str):
+def stream_answer_gemini(*, prompt:str, app_state:AppState) -> Iterable[str]:
     """
     Generator stream text dần dần (chunked plain text)
     """
@@ -60,21 +62,21 @@ def build_prompt_from_template(*, question: str, contexts: List[Dict], lang: str
     template = TPL.read_text(encoding="utf-8")
     return _render_prompt(template, question=question, contexts=contexts, lang=lang)
 
-def generate_answer_nonstream(*, question: str, contexts: List[Dict], lang: str) -> Tuple[str, str]:
+def generate_answer_nonstream(*, question: str, contexts: List[Dict], lang: str, app_state: AppState) -> Tuple[str, str]:
     prompt = build_prompt_from_template(
         question=question,
         contexts=contexts,
         lang=lang,
     )
-    return answer_once_gemini(prompt=prompt)
+    return answer_once_gemini(prompt=prompt,app_state=app_state)
 
-def generate_answer_stream(*, question: str, contexts: List[Dict], lang: str):
+def generate_answer_stream(*, question: str, contexts: List[Dict], lang: str, app_state: AppState) -> Iterable[str]:
     prompt = build_prompt_from_template(
         question=question,
         contexts=contexts,
         lang=lang,
     )
-    return stream_answer_gemini(prompt=prompt)
+    return stream_answer_gemini(prompt=prompt, app_state=app_state)
 
 def prepare_contexts_for_response(contexts: List[Dict]) -> List[Dict]:
     return _normalize_contexts(contexts)

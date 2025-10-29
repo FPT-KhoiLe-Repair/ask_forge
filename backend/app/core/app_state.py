@@ -45,7 +45,6 @@ class AppState:
         if getattr(self, "_constructed", False):
             return
 
-
         # ---- Fields chỉ tạo 1 lần ----
         self._init_lock = asyncio.Lock()   # Lock để tránh race khi startup
         self._initialized = False          # Chỉ True sau khi startup xong
@@ -93,14 +92,14 @@ class AppState:
                 return self._hf_tok, self._hf_model
 
             qg_ckpt = APP_DIR.joinpath("services","checkpoints","QG_Models")
-            qwen_cpt = qg_ckpt / model_repo
+            qwen_ckpt = qg_ckpt / model_repo
             # dtype/device config
             prefer_bf16 = settings.HF_DTYPE.lower() in {"bf16", "bfloat16"}
             dtype = torch.bfloat16 if prefer_bf16 and torch.cuda.is_available() else "auto"
 
             device_map = settings.HF_DEVICE_MAP
 
-            logger.info("🧠 Loading HF model %s (device_map=%s, dtype=%s)...", qg_ckpt, device_map, dtype)
+            logger.info("🧠 Loading HF model %s (device_map=%s, dtype=%s)...", qwen_ckpt, device_map, dtype)
 
             loop = asyncio.get_running_loop()
 
@@ -108,10 +107,10 @@ class AppState:
                 from transformers import AutoTokenizer, AutoModelForCausalLM
                 # Import nặng để trong hàm -> chỉ import khi cần
                 tok = AutoTokenizer.from_pretrained(
-                    qwen_cpt,
+                    qwen_ckpt,
                 )
                 model = AutoModelForCausalLM.from_pretrained(
-                    qwen_cpt,
+                    qwen_ckpt,
                     dtype=dtype,
                     device_map=device_map,
                 )
@@ -130,7 +129,7 @@ class AppState:
                 except Exception:
                     pass
                 self._hf_model = None
-                self.hf_tok = None
+                self._hf_tok = None
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 elif getattr(torch, "mps", None) and torch.backends.mps.is_available():
@@ -147,7 +146,7 @@ class AppState:
     # ------------------------------
     async def startup(self):
         """
-        Khởi tạo tất cả resources khi app startup.
+        Khởi tạo chroma_repo, ensure_hf_model.
         Gọi hàm này trong FastAPI lifespan event.
         """
         async with self._init_lock:
@@ -164,28 +163,22 @@ class AppState:
                 # Load danh sách các collections hiện có
                 collections = self.chroma_repo.list_collections()
 
-                prefix = getattr(settings, "CHROMA_COLLECTION_PREFIX", None)
-                def strip_prefix(name: str) -> str:
-                    if not prefix:
-                        return name
-                    return name[len(prefix):] if name.startswith(prefix) else name
-
-                self.active_indexes = {strip_prefix(col.name) for col in collections}
+                self.active_indexes = {col.name for col in collections}
                 logger.info(
                     "✅ ChromaDB ready. Found %d existing indexes: %s",
                     len(self.active_indexes), self.active_indexes
                 )
-            except Exception:
-                logger.exception("❌ Failed to initialize ChromaDB")
+            except Exception as e:
+                logger.exception(f"❌ Failed to initialize ChromaDB. Error: {e}")
                 # _initialized vẫn False nếu fail
                 raise
 
             # 2) Load ML checkpoints
             try:
-                if os.getenv("HF_RELOAD_AT_STARTUP", "0") == "1":
+                if settings.HF_PRELOAD_AT_STARTUP:
                     await  self.ensure_hf_model()
                 else:
-                    logger.info("ℹ️ HF preload disabled (HF_PRELOAD_AT_STARTUP!=1)")
+                    logger.info("ℹ️ HF preload disabled (HF_RELOAD_AT_STARTUP==False)")
             except Exception:
                 logger.exception("❌ Failed to preload HF model (will continue without it)")
 
@@ -236,13 +229,8 @@ class AppState:
         """Đồng bộ lại active_indexes từ Chroma khi có thay đổi ngoài luồng."""
         if not self.chroma_repo:
             raise RuntimeError("ChromaDB not initialized. Make sure app_state.startup() was called.")
-        prefix = getattr(settings, "CHROMA_COLLECTION_PREFIX", None)
-        def strip_prefix(name: str) -> str:
-            if not prefix:
-                return name
-            return name[len(prefix):] if name.startswith(prefix) else name
         cols = self.chroma_repo.list_collections()
-        self.active_indexes = {strip_prefix(c.name) for c in cols}
+        self.active_indexes = {c.name for c in cols}
 
     def register_index(self, index_name: str):
         """Đăng ký index mới vào active set."""
@@ -277,6 +265,7 @@ async def lifespan_manager(app):
             app = FastAPI(lifespan=lifespan_manager)
         """
     await app_state.startup()
+    app.state.app_state = app_state
 
     try:
         yield

@@ -1,20 +1,21 @@
 from __future__ import annotations
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
-from ask_forge.backend.app.core.app_state import logger
+from ask_forge.backend.app.core.app_state import logger, AppState
 from ask_forge.backend.app.features.qg.service import QGService
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
-from ask_forge.backend.app.features.chat.schemas import ChatBody, ChatResponse, ContextChunk
-from ask_forge.backend.app.features.chat.pipeline import (
+from ask_forge.backend.app.services.chat.schemas import ChatBody, ChatResponse, ContextChunk
+from ask_forge.backend.app.services.chat.pipeline import (
     generate_answer_nonstream,
     generate_answer_stream,
     prepare_contexts_for_response
 )
-from ask_forge.backend.app.core.app_state import app_state
+
 
 class ChatService:
-    def __init__(self, repo: ChromaRepo):
+    def __init__(self,app_state:AppState, repo: ChromaRepo):
         self.repo = repo
+        self.app_state = app_state
         self.qg_service = QGService()
 
     def _retrieve(self, *, index_name: str, query_text: str, n_results: int = 3, min_rel: float = 0.5) -> List[Dict]:
@@ -47,6 +48,7 @@ class ChatService:
                 question=body.query_text,
                 contexts=contexts,
                 lang=body.lang,
+                app_state=self.app_state,
             )
         except Exception as e:
             logger.exception(e)
@@ -72,13 +74,14 @@ class ChatService:
                 page=c.get("page"),
                 chunk_id=c.get("chunk_id"),
                 preview=c.get("text", "")[:240],
-                text=c.get("text","")
+                text=c.get("text",""),
+                score=c.get("score"),
             )
             for c in contexts
         ]
         results = ChatResponse(
             ok=True,
-            answer=answer_text,
+            answer=answer_text or "Xin lỗi, mình chưa tìm được câu trả lời phù hợp từ context hiện có.",
             contexts=contexts_serialized,
             followup_questions=followup_questions,
             model_name=model_name,
@@ -98,6 +101,7 @@ class ChatService:
             question=body.query_text,
             contexts=contexts,
             lang=body.lang,
+            app_state=self.app_state,
         )
         return ChatResponse(
             ok=True,
@@ -105,6 +109,7 @@ class ChatService:
             contexts=[ContextChunk(**c,
                                    preview=c.get("text", "")[:240])
                       for c in prepare_contexts_for_response(contexts)],
+            followup_questions=[],
             model_name=model_name,
         )
 
@@ -119,6 +124,5 @@ class ChatService:
             question=body.query_text,
             contexts=contexts,
             lang=body.lang,
+            app_state=self.app_state,
         )
-
-chat_service = ChatService(ChromaRepo())

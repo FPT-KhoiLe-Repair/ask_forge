@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { useStore } from "@/lib/store"
 import { getTranslation } from "@/lib/translations"
 import { ChatMessage } from "@/components/chat-message"
+import { FollowupPills } from "@/components/followup_questions_pill"
 import { PromptSuggestions } from "@/components/prompt-suggestions"
 import { chatAPI, chatStreamAPI, type ChatContext } from "@/app/api/chat"
 import { useToast } from "@/hooks/use-toast"
@@ -33,6 +34,13 @@ export function ChatPanel() {
   } = useStore()
   const { toast } = useToast()
   const [input, setInput] = useState("")
+  const [followupQuestions, setFollowupQuestions] = useState<string[]>([])
+  
+  // khi người dùng gõ, clear gợi ý (tránh cũ dính sang câu sau)
+  const onInputChange = (v: string) => {
+    setInput(v)
+    if (followupQuestions.length > 0) setFollowupQuestions([])
+  }
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState("")
   const [useStreaming, setUseStreaming] = useState(false) // Toggle streaming mode
@@ -64,6 +72,9 @@ export function ChatPanel() {
       )
 
       const response = await chatAPI(userMessage, indexName)
+
+      // Set follow-up questions
+      setFollowupQuestions(response.followup_questions ?? [])
 
       // Format contets for thoughts panel
       const contextSummary = response.contexts
@@ -267,6 +278,13 @@ export function ChatPanel() {
       {/* Input Area */}
       <div className="border-t border-border bg-card/80 p-4 backdrop-blur-sm">
         <div className="mx-auto max-w-3xl space-y-4">
+          {/* Follow-up Question Pills */}
+          <FollowupPills 
+          items={followupQuestions} 
+          onPick={(q) => {
+            setInput(q)
+            textareaRef.current?.focus()
+          }} />
           <PromptSuggestions onSuggestionClick={handleSuggestionClick} />
 
           {/* Settings */}
@@ -298,7 +316,7 @@ export function ChatPanel() {
             />
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || isStreaming || indexStatus !== "ready"}
+              disabled={!input.trim() || isStreaming || indexStatus === "ready"}
               size="icon"
               className="h-[60px] w-[60px] shrink-0 rounded-2xl bg-gradient-primary hover:opacity-90"
             >

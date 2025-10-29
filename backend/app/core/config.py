@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "AskForge Backend"
     DEBUG: bool = False
     APP_PREFIX: str = "/api"
+    APP_DESCRIPTION: str = "AskForge Backend - RAG + Question Generation APIs"
 
     # CORS
     CORS_ORIGINS: List[AnyHttpUrl] = []
@@ -25,7 +26,6 @@ class Settings(BaseSettings):
 
     # Chroma
     CHROMA_PERSIST_DIR: str = ".chroma"
-    CHROMA_COLLECTION_PREFIX: str = "askforge_"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     # Gemini (đặt required hoặc có default tuỳ bạn)
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     HF_DTYPE: str = Field(default="")
     HF_LOW_CPU_MEM: bool = Field(default=True)
     HF_TRUST_REMOTE_CODE: bool = Field(default=False)
-    HF_PRELOAD_AT_STARTUP: bool = Field(default=False)
+    HF_PRELOAD_AT_STARTUP: bool = Field(default=True)
 
     # >>> Pydantic v2 config
     model_config = SettingsConfigDict(

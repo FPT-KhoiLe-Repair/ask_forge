@@ -1,4 +1,4 @@
-import logger
+import logging
 import logging.config
 import sys
 

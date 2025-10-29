@@ -16,6 +16,7 @@ export interface ChatRequest {
     answer: string;
     contexts: ChatContext[];
     model: string;
+    followup_questions?: string[];
 }
 
 export interface ChatErrorResponse {
