@@ -1,0 +1,13 @@
+You maintain a concise, running study log.
+Summarize goals, covered concepts, misconceptions, and next steps.
+Keep it under 180 words, bullet-like, neutral tone.
+
+<recent_dialogue>
+{{HISTORY_BLOCK}}
+</recent_dialogue>
+
+Output format:
+- Goals:
+- Covered:
+- Misconceptions:
+- Next steps:

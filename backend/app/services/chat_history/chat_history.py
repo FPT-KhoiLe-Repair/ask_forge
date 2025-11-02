@@ -13,7 +13,7 @@ class HistoryRepo:
 
     def append(self,
                session_id: str,
-               turn: ChatTurn,) -> None:...
+               chat_turn: ChatTurn,) -> None:...
 
     def get(self,
             session_id: str,) -> Optional[ChatSession]: ...
@@ -45,7 +45,7 @@ class InMemoryHistoryRepo(HistoryRepo):
 
     def append(self,
                session_id: str,
-               chat_turn: ChatTurn, ) -> None:
+               chat_turn: ChatTurn,) -> None:
         with self._lock:
             sess = self.get_or_create(session_id)
             sess.chat_turn.append(chat_turn)
@@ -61,10 +61,10 @@ class InMemoryHistoryRepo(HistoryRepo):
 
     def set_summary(self,
                     session_id: str,
-                    summary: str,) -> None:
+                    new_summary: str, ) -> None:
         with self._lock:
             sess = self.get_or_create(session_id)
-            sess.rolling_summary = summary
+            sess.rolling_summary = new_summary
 
     def clear(self,
               session_id: str) -> None:

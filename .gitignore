@@ -37,6 +37,7 @@ __pycache__/
 /backend/.coverage
 /backend/htmlcov/
 /backend/.DS_Store
+checkpoints/
 
 # ========================
 # FRONTEND (Next.js / React)

@@ -1,7 +1,7 @@
 from typing import List
 import torch, json
 from ask_forge.backend.app.core.app_state import app_state
-from ask_forge.backend.app.services.qg.prompts.templates import build_queries_prompt
+from ask_forge.backend.app.services.qg.prompts.templates import build_queries_prompt_from_template
 
 class __QueryGenerator:
     def generate(self,
@@ -18,15 +18,22 @@ class HFQueryGenerator(__QueryGenerator):
                  seed_question: str,
                  contexts: str,
                  n: int = 5,
-                 lang: str = "vn",) -> List[str]:
+                 lang: str = "vn",
+                 history_block: str = "",
+                 summary_block: str = "") -> List[str]:
         tok, model = await app_state.ensure_hf_model(self.model_repo)
 
-        user_prompt = build_queries_prompt(
+        user_prompt = build_queries_prompt_from_template(
             seed_question=seed_question,
             contexts=contexts,
             n=n,
             lang=lang,
+            history_block=history_block,
+            summary_block=summary_block
         )
+        with open("user_prompt.txt", "w", encoding="utf-8") as f:
+            f.write(user_prompt)
+
         messages = [
             {"role": "system", "content": f"Always answer in English."},
             {"role": "system", "content": user_prompt},

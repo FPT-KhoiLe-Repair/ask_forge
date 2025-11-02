@@ -12,6 +12,8 @@ import logging
 
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
 from ask_forge.backend.app.core.config import settings
+from ask_forge.backend.app.services.chat_history.chat_history import InMemoryHistoryRepo
+
 import os, torch
 from pathlib import Path
 import google.genai as genai
@@ -57,6 +59,12 @@ class AppState:
         self._hf_tok = None
         self._hf_model = None
         self._hf_lock = asyncio.Lock() # Tránh double-load HF
+
+        # History repo
+        self.history_repo = InMemoryHistoryRepo(
+            default_last_k=12,
+            max_turns_per_session=800)
+
         # --------------------------------
         self._constructed = True
         logger.info("AppState constructed")
@@ -105,6 +113,8 @@ class AppState:
 
             def _load_sync():
                 from transformers import AutoTokenizer, AutoModelForCausalLM
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
                 # Import nặng để trong hàm -> chỉ import khi cần
                 tok = AutoTokenizer.from_pretrained(
                     qwen_ckpt,
@@ -113,7 +123,7 @@ class AppState:
                     qwen_ckpt,
                     dtype=dtype,
                     device_map=device_map,
-                )
+                ).to(device).eval()
                 return tok, model
         self._hf_tok, self._hf_model = await loop.run_in_executor(None, _load_sync)
         logger.info(f"✅ HF model loaded. Model: {self._hf_model}")

@@ -10,6 +10,8 @@ class QGService:
                                  seed_question: str,
                                  contexts: List[Dict],
                                  n: int = 5,
-                                 lang: str = "vi"):
+                                 lang: str = "vi",
+                                 history_block: str = "",
+                                 summary_block: str = "",):
         contexts_str = "".join(ctx["text"] for ctx in contexts)
-        return await self.generator.generate(seed_question, contexts_str, n, lang)
+        return await self.generator.generate(seed_question, contexts_str, n, lang, history_block=history_block, summary_block=summary_block)

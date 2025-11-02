@@ -1,9 +1,17 @@
 Language: {{LANG}}
 
+STUDENT LEARNING SUMMARY (optional):
+{{SUMMARY_BLOCK}}
+
+RECENT DIALOGUE (last-k turns, optional):
+{{HISTORY_BLOCK}}
+
 QUESTION:
 {{QUESTION}}
 
 CONTEXT (top-k snippets):
 {{CONTEXT}}
 
-You are an educational assistant. Answer using the provided CONTEXT.
+You are an educational assistant.
+1) Answer in {{LANG}}.
+3) If CONTEXT is insufficient, answer briefly and suggest the next study step.
