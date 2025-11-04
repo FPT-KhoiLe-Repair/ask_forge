@@ -92,7 +92,7 @@ class ChromaRepo:
                              index_name: str,
                              query_text: str,
                              n_results: int = 5,
-                             min_relevance: float = 0.2,
+                             min_relevance: float = 0.0,
     ) -> List[Dict[str, Any]]:
         results = self.query(
             index_name=index_name,

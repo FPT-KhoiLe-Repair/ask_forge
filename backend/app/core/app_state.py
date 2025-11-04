@@ -87,7 +87,7 @@ class AppState:
     # ------------------------------
     # HF model: lazy & thread-safe
     # ------------------------------
-    async def ensure_hf_model(self, model_repo: Optional[str] = "Qwen/Qwen2.5-0.5B"):
+    async def ensure_hf_model(self, model_repo):
         """
         Lazy-load HF CasualLM + tokenizer (non-blocking event-loop).
         - Nếu không dùng hf repo: dùng Qwen/Qwen2.5-0.5B
@@ -106,6 +106,7 @@ class AppState:
             dtype = torch.bfloat16 if prefer_bf16 and torch.cuda.is_available() else "auto"
 
             device_map = settings.HF_DEVICE_MAP
+
 
             logger.info("🧠 Loading HF model %s (device_map=%s, dtype=%s)...", qwen_ckpt, device_map, dtype)
 
@@ -186,7 +187,7 @@ class AppState:
             # 2) Load ML checkpoints
             try:
                 if settings.HF_PRELOAD_AT_STARTUP:
-                    await  self.ensure_hf_model()
+                    await  self.ensure_hf_model(settings.HF_QG_CKPT)
                 else:
                     logger.info("ℹ️ HF preload disabled (HF_RELOAD_AT_STARTUP==False)")
             except Exception:

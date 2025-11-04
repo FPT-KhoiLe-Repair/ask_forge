@@ -13,6 +13,10 @@ from ask_forge.backend.app.services.chat.pipeline import (
     build_system_memory_block
 )
 from ask_forge.backend.app.services.chat_history.summary import generate_session_summary
+
+import hashlib
+import secrets
+
 class ChatService:
     def __init__(self,app_state : AppState, repo: ChromaRepo):
         self.repo = repo
@@ -32,8 +36,17 @@ class ChatService:
         """
         Chat system logic: retrieve, answer, generate follow-ups.
         """
-        session_id = getattr(body, "session_id", body.index_name) #TODO: trong tương lai có thể dùng chat_session_id để lưu nhiều chat_session
-        user_id = getattr(body, "user_id", None) #TODO: tương tự, cái này để dành cho tương lai, còn cái này dùng các default option cho dễ
+        # Generate a random salt
+        salt = secrets.token_bytes(16)
+
+        # Data to be hashed (can be anything)
+        data = b"my secret message"
+
+        # Combine data and salt, then hash
+        hashed_data = hashlib.sha256(salt + data).hexdigest()
+
+        session_id = getattr(body, "session_id", hashed_data) #TODO: trong tương lai có thể dùng chat_session_id để lưu nhiều chat_session
+        user_id = getattr(body, "user_id", hashed_data) #TODO: tương tự, cái này để dành cho tương lai, còn cái này dùng các default option cho dễ
 
         current_session = self.chat_history.get_or_create(session_id=session_id, user_id=user_id)
 
@@ -53,17 +66,7 @@ class ChatService:
         )
         logger.info(f"📚 Retrieved {len(contexts)} context chunks")
 
-        # ---- Step 2: Append USER turn to history (question) ----
-        self.chat_history.append(
-            session_id=session_id,
-            chat_turn=ChatTurn(
-                role="user",
-                question=body.query_text,
-                index_name=body.index_name,
-                contexts=None
-        ))
-
-        # ---- Step 3: Build prompts & Generate Answer ----
+        # ---- Step 2: Build prompts & Generate Answer ----
         try:
             answer_text, model_name = generate_answer_non_stream(
                 question=body.query_text,
@@ -78,7 +81,7 @@ class ChatService:
             answer_text = f"Xin lỗi, có lỗi khi truy vẫn mô hình:{e}"
             model_name = ""
 
-        # ---- Step 4: Generate follow-up questions ----
+        # ---- Step 3: Generate follow-up questions ----
         try:
             followup_questions = await self.qg_service.generate_questions(
                 seed_question=body.query_text,
@@ -86,10 +89,23 @@ class ChatService:
                 lang=body.lang,
                 history_block=history_block,
                 summary_block=summary_block
-            )
+            ) #-> <quert_text> <<type>> <rsp1-n> <<type>>
+            seed_question = followup_questions[0]
+            followup_questions = followup_questions[1:]
         except Exception as e:
             logger.exception(e)
             followup_questions = []
+            seed_question = ""
+
+        # ---- Step 4: Append USER turn to history (question) ----
+        self.chat_history.append(
+            session_id=session_id,
+            chat_turn=ChatTurn(
+                role="user",
+                question=seed_question,
+                index_name=body.index_name,
+                contexts=None
+        ))
 
         # ---- Step 5: Append ASSISTANT turn (answer) ----
         self.chat_history.append(

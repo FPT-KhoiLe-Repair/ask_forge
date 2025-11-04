@@ -32,19 +32,22 @@ def _extract_questions_from_history(history_block: str) -> List[str]:
 def build_queries_prompt_from_template(*, seed_question: str, contexts: str, n:int, lang: str, history_block:str= "", summary_block:str= "") -> str:
     # Đọc template từ file (đọc mỗi lần cho đơn giản; nếu muốn có thể cache)
     from pathlib import Path
-    tpl = Path(__file__).resolve().parent / "qg_prompt.txt"
-    template = tpl.read_text(encoding="utf-8")
 
     # Parse <q>...</q> -> danh sách câu hỏi
     history_questions = _extract_questions_from_history(history_block)
 
+
     # Nếu có câu hỏi thì nối thành khối gọn gàng
     if history_questions:
         formatted_history = "\n".join(
-            f" {q}" for q in history_questions[-1:]
+            f" {q}" for q in history_questions[:]
         )
     else:
         formatted_history = ""
+    with open("qg_prompt.txt", "w", encoding="utf-8") as f:
+        f.write(formatted_history)
+
+    return formatted_history
     return _render_prompt(template,
                           question=seed_question,
                           contexts=contexts,

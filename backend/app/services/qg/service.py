@@ -1,10 +1,10 @@
 from typing import Dict, List
 
 from ask_forge.backend.app.services.qg.pipeline import HFQueryGenerator
-
+from ask_forge.backend.app.core.config import settings
 class QGService:
     def __init__(self):
-        self.generator = HFQueryGenerator("Qwen/Qwen2.5-0.5B")
+        self.generator = HFQueryGenerator(model_repo=settings.HF_QG_CKPT)
 
     async def generate_questions(self,
                                  seed_question: str,
