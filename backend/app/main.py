@@ -8,6 +8,7 @@ from ask_forge.backend.app.core.logging import setup_logging
 from ask_forge.backend.app.core.app_state import lifespan_manager
 from ask_forge.backend.app.api.routes.index_routes import router as index_router
 from ask_forge.backend.app.api.routes.chat_routes import router as chat_router
+from ask_forge.backend.app.core.logging import request_id_var
 
 # 0) Logging
 setup_logging()
@@ -47,3 +48,14 @@ Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_sch
 @app.get("/")
 async def hello():
     return {"message": "Welcome to Ask Forge!"}
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    req_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    token = request_id_var.set(req_id)
+    try:
+        resp = await call_next(request)
+        resp.headers["X-Request-ID"] = req_id
+        return resp
+    finally:
+        request_id_var.reset(token)

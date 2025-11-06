@@ -15,6 +15,10 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+
 from ask_forge.backend.app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -93,7 +97,7 @@ class LangChainState:
         from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
         import torch
 
-        model_path = settings.HF_QG_CKPT
+        model_path = settings.HF_QUESTION_GENERATOR_CKPT
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
@@ -134,4 +138,54 @@ class LangChainState:
             )
         return self._memories[session_id]
 
-    def build_rag_chain
+    def build_rag_chain(
+            self,
+            index_name: str,
+            session_id: str,
+            prompt_template: str = "default",
+    ):
+        """
+        Build LCEL chain: retriever -> prompt -> LLM -> parser
+        """
+        # 1. Retriever
+        vectorstore = self.get_vectorstore(index_name)
+        retriever = vectorstore.as_retriever(
+            search_kwargs={"k":5}
+        )
+
+        # 2. Prompt template (tùy chỉnh theo role)
+        if prompt_template == "tutor":
+            system_msg = "You are a patient tutor. Explain step-by-step."
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_msg),
+                MessagesPlaceholder("chat_history"),  # Memory injection
+                ("human", "{question}"),
+                ("system", "Context:\n{context}")
+            ])
+        elif prompt_template == "qg":
+            system_msg = "" # TODO: Xem xét lại cách thiết lập prompt chuyên cho QG
+        else:
+            system_msg = "You are a helpful educational assistant." # TODO: Khúc này bạn có thể suy nghĩ phát triển hệ thống theo system_msg theo role nè
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_msg),
+                MessagesPlaceholder("chat_history"),  # Memory injection
+                ("human", "{question}"),
+                ("system", "Context:\n{context}")
+            ])
+
+        # 3. Memory
+        memory = self.get_memory(session_id, k=6)
+
+        # 4. Chain assembly (LCEL)
+        chain = (
+                RunnableParallel({
+                    "context": retriever,
+                    "question": RunnablePassthrough(),
+                    "chat_history": lambda _: memory.load_memory_variables({})["chat_history"]
+                })
+                | prompt
+                | self.gemini_llm
+                | StrOutputParser()
+        )
+
+        return chain, memory

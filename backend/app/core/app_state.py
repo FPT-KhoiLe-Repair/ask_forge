@@ -13,10 +13,15 @@ import logging
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
 from ask_forge.backend.app.core.config import settings
 from ask_forge.backend.app.services.chat_history.chat_history import InMemoryHistoryRepo
+from ask_forge.backend.app.services.llm.adapters.question_generator import QuestionGeneratorAdapter
 
-import os, torch
+from ask_forge.backend.app.services.llm.registry import get_registry, LLMRegistry
+from ask_forge.backend.app.services.llm.router import LLMRouter, prefer_local_for_qg, prefer_gemini_for_chat
+
+from ask_forge.backend.app.services.llm.adapters.gemini import GeminiAdapter
+from ask_forge.backend.app.services.llm.adapters.huggingface import HuggingFaceAdapter
+
 from pathlib import Path
-import google.genai as genai
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +60,8 @@ class AppState:
         self.loaded_models: Dict[str, Any] = {}
         self.active_indexes: set[str] = set()
 
-        # HF (lazy)
-        self._hf_tok = None
-        self._hf_model = None
-        self._hf_lock = asyncio.Lock() # Tránh double-load HF
+        self.llm_registry: LLMRegistry = get_registry() # Đăng kí một singleton LLMRegistry
+        self.llm_router = LLMRouter()
 
         # History repo
         self.history_repo = InMemoryHistoryRepo(
@@ -68,89 +71,6 @@ class AppState:
         # --------------------------------
         self._constructed = True
         logger.info("AppState constructed")
-
-    @lru_cache(maxsize=None)
-    def ensure_gemini_client(self) -> genai.Client:
-        """
-        Trả về 1 instance google.genai.Client, cache theo process
-        Yêu cầu: settings.GEMINI_API_KEY
-        """
-        api_key = settings.GEMINI_API_KEY
-        if not api_key:
-            raise RuntimeError(("❌ Missing GEMINI_API_KEY in env/.env (core/config.py)"))
-        return genai.Client(api_key=api_key)
-
-    def get_gemini_model_name(self) -> str:
-        """Tên model Gemini mặc định lấy từ settings"""
-        return settings.GEMINI_MODEL_NAME
-
-    # ------------------------------
-    # HF model: lazy & thread-safe
-    # ------------------------------
-    async def ensure_hf_model(self, model_repo):
-        """
-        Lazy-load HF CasualLM + tokenizer (non-blocking event-loop).
-        - Nếu không dùng hf repo: dùng Qwen/Qwen2.5-0.5B
-        """
-        if self._hf_model is not None:
-            return self._hf_tok, self._hf_model
-
-        async with self._hf_lock:
-            if self._hf_model is not None:
-                return self._hf_tok, self._hf_model
-
-            qg_ckpt = APP_DIR.joinpath("services","checkpoints","QG_Models")
-            qwen_ckpt = qg_ckpt / model_repo
-            # dtype/device config
-            prefer_bf16 = settings.HF_DTYPE.lower() in {"bf16", "bfloat16"}
-            dtype = torch.bfloat16 if prefer_bf16 and torch.cuda.is_available() else "auto"
-
-            device_map = settings.HF_DEVICE_MAP
-
-
-            logger.info("🧠 Loading HF model %s (device_map=%s, dtype=%s)...", qwen_ckpt, device_map, dtype)
-
-            loop = asyncio.get_running_loop()
-
-            def _load_sync():
-                from transformers import AutoTokenizer, AutoModelForCausalLM
-                import torch
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                # Import nặng để trong hàm -> chỉ import khi cần
-                tok = AutoTokenizer.from_pretrained(
-                    qwen_ckpt,
-                )
-                model = AutoModelForCausalLM.from_pretrained(
-                    qwen_ckpt,
-                    dtype=dtype,
-                    device_map=device_map,
-                ).to(device).eval()
-                return tok, model
-        self._hf_tok, self._hf_model = await loop.run_in_executor(None, _load_sync)
-        logger.info(f"✅ HF model loaded. Model: {self._hf_model}")
-        return self._hf_tok, self._hf_model
-
-    def unload_hf_model(self):
-        """Giải phóng GPU/VRAM khi tắt app."""
-        if self._hf_model is not None:
-            try:
-                # chuyển v CPU trước khi drop reference
-                try:
-                    self._hf_model.to("cpu")
-                except Exception:
-                    pass
-                self._hf_model = None
-                self._hf_tok = None
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                elif getattr(torch, "mps", None) and torch.backends.mps.is_available():
-                    try:
-                        torch.mps.empty_cache()
-                    except Exception:
-                        pass
-                logger.info("🧹 HF model unloaded")
-            except Exception:
-                logger.exception("Failed to unload HF model safely!")
 
     # ------------------------------
     # App lifecycle
@@ -184,14 +104,29 @@ class AppState:
                 # _initialized vẫn False nếu fail
                 raise
 
-            # 2) Load ML checkpoints
-            try:
-                if settings.HF_PRELOAD_AT_STARTUP:
-                    await  self.ensure_hf_model(settings.HF_QG_CKPT)
-                else:
-                    logger.info("ℹ️ HF preload disabled (HF_RELOAD_AT_STARTUP==False)")
-            except Exception:
-                logger.exception("❌ Failed to preload HF model (will continue without it)")
+            # Use
+            logger.info("🔌 Registering LLM providers...")
+
+            # Gemini
+            self.llm_registry.register("gemini_service", GeminiAdapter())
+
+            # Question Generator Register
+            if settings.HF_PRELOAD_AT_STARTUP:
+                question_generator_adapter = QuestionGeneratorAdapter(model_repo=settings.HF_QUESTION_GENERATOR_CKPT)
+                await question_generator_adapter._ensure_loaded() # Lệnh kích hoạt load Adapter/Model
+                self.llm_registry.register("question_generator_service", question_generator_adapter)
+            else:
+                # Lazy: register nhưng chưa load
+                self.llm_registry.register(
+                    "question_generator_service",
+                    QuestionGeneratorAdapter(model_repo=settings.HF_QUESTION_GENERATOR_CKPT)
+                )
+
+            # Setup router policies
+            self.llm_router.add_policy(prefer_gemini_for_chat)
+            self.llm_router.add_policy(prefer_local_for_qg)
+
+            logger.info(f"✅ LLM providers ready: {self.llm_registry.list_providers()}")
 
             self._initialized = True
             logger.info("✅ All application resources started successfully")
@@ -201,9 +136,6 @@ class AppState:
         Cleanup resources khi app shutdown.
         """
         logger.info("🛑 Shutting down application resources...")
-
-        # HF model
-        self.unload_hf_model()
 
         # Cleanup ChromaDb nếu cần
         if self.chroma_repo:
@@ -220,9 +152,6 @@ class AppState:
         self._initialized = False
         logger.info("✅ All resources cleaned up")
 
-    # ------------------------------
-    # Utilities
-    # ------------------------------
     def get_chroma_repo(self) -> ChromaRepo:
         """
         Lấy ChromaDB repository instance.
@@ -255,10 +184,6 @@ class AppState:
     def index_exists(self, index_name: str) -> bool:
         """Kiểm tra xem index có tồn tại không."""
         return index_name in self.active_indexes
-
-    def get_model(self, model_name: str) -> Optional[Any]:
-        """Lấy ML model đã load."""
-        return self.loaded_models.get(model_name)
 
 # ---- The SINGLE way to obtain AppState everywhere ----
 @lru_cache(maxsize=1)

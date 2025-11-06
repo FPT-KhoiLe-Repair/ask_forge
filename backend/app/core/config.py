@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL_NAME: str = Field(default="gemini-2.5-flash")
 
     # HF
-    HF_QG_CKPT: str = Field(default="Qwen/qwen-security-final-question-reformatted")
+    HF_QUESTION_GENERATOR_CKPT: str = Field(default="Qwen/qwen-security-final-question-reformatted")
     HF_LOCAL_ONLY: bool = Field(default=False)
     HF_DEVICE_MAP: str = Field(default="auto")
 
@@ -50,4 +50,4 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
-print(settings.HF_QG_CKPT)
+print(settings.HF_QUESTION_GENERATOR_CKPT)

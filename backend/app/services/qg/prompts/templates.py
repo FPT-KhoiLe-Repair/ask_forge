@@ -29,7 +29,13 @@ def _extract_questions_from_history(history_block: str) -> List[str]:
     cleaned = [q.strip() for q in questions if q.strip()]
     return cleaned
 
-def build_queries_prompt_from_template(*, seed_question: str, contexts: str, n:int, lang: str, history_block:str= "", summary_block:str= "") -> str:
+def build_queries_prompt_from_template(
+        *,
+        seed_question: str,
+        contexts: str,
+        n:int,
+        lang: str,
+        history_block:str= "", summary_block:str= "") -> str:
     # Đọc template từ file (đọc mỗi lần cho đơn giản; nếu muốn có thể cache)
     from pathlib import Path
 

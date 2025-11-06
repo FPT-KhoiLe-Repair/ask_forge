@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict, Iterable, Tuple
+from typing import List, Dict, Iterable, Tuple, AsyncIterable, AsyncIterator
 
 from ask_forge.backend.app.core.app_state import AppState
 from ask_forge.backend.app.services.chat.schemas import ChatTurn, ContextChunk
@@ -103,6 +103,36 @@ def generate_answer_non_stream(*,
         summary_block=summary_block
     )
     return answer_once_gemini(prompt=prompt,app_state=app_state)
+
+async def answer_once_llm(
+    *,
+    prompt: str,
+    app_state: AppState,
+    task: str = "chat",
+    **context
+) -> Tuple[str, str]:
+    """Dùng Router chọn LLM provider"""
+    provider = await app_state.llm_router.route({
+        "task": task,
+        **context
+    })
+    text = await provider.generate(prompt)
+    return text.strip(), provider.model_name
+
+async def stream_answer_llm(
+    *,
+    prompt: str,
+    app_state: AppState,
+    task: str = "chat",
+    **context
+) -> AsyncIterator[str]:
+    """Streaming qua Router"""
+    provider = await app_state.llm_router.route({
+        "task": task,
+        **context
+    })
+    async for chunk in provider.generate_stream(prompt):
+        yield chunk
 
 def generate_answer_stream(*, question: str, contexts: List[Dict], lang: str, app_state: AppState) -> Iterable[str]:
     prompt = build_chat_prompt_from_template(

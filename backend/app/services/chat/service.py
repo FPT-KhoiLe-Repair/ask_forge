@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+import asyncio
+import json
 from typing import List, Dict
 
 from ask_forge.backend.app.core.app_state import logger, AppState
@@ -10,8 +13,9 @@ from ask_forge.backend.app.services.chat.pipeline import (
     generate_answer_stream,
     prepare_contexts_for_response,
     build_history_context,
-    build_system_memory_block
+    build_system_memory_block, build_chat_prompt_from_template, stream_answer_llm
 )
+from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueue
 from ask_forge.backend.app.services.chat_history.summary import generate_session_summary
 
 import hashlib
@@ -21,8 +25,9 @@ class ChatService:
     def __init__(self,app_state : AppState, repo: ChromaRepo):
         self.repo = repo
         self.app_state = app_state
-        self.qg_service = QGService()
+        self.question_generator_service = app_state.llm_registry.get("question_generator_service")
         self.chat_history = app_state.history_repo
+        self.bq_queue = BackgroundQueue()
 
     def _retrieve(self, *, index_name: str, query_text: str, n_results: int = 3, min_rel: float = 0.5) -> List[Dict]:
         return self.repo.get_context_for_chat(
@@ -31,6 +36,63 @@ class ChatService:
             n_results=n_results,
             min_relevance=min_rel,
         )
+
+    async def chat_stream_sse(self, body: ChatBody):
+        """Generator trả SSE chunks"""
+
+        # 1. Retrieve (non-blocking)
+        contexts = await asyncio.to_thread(
+            self._retrieve,
+            index_name=body.index_name,
+            query_text=body.query_text,
+            n_results=body.n_results,
+            min_rel=body.min_rel,
+        )
+
+        # 2. Stream answer
+        prompt = build_chat_prompt_from_template(
+            question=body.query_text,
+            contexts=contexts,
+            lang=body.lang
+        )
+
+        buffer = ""
+        async for chunk in stream_answer_llm(
+                prompt=prompt,
+                app_state=self.app_state,
+                task="chat"
+        ):
+            buffer += chunk
+            yield json.dumps({"type": "token", "content": chunk})
+
+        # 3. Contexts (cuối stream)
+        yield json.dumps({
+            "type": "contexts",
+            "data": [
+                {
+                    "source": c.get("source"),
+                    "page": c.get("page"),
+                    "preview": c.get("text", "")[:200],
+                    "score": c.get("score")
+                }
+                for c in contexts
+            ]
+        })
+
+        # 4. Followup questions (background task - không chặn)
+        # TODO: sẽ làm ở bước 2.3
+        job_id = await self.bq_queue.enqueue_qg(
+            seed_question=body.query_text,
+            contexts=contexts,
+            lang=body.lang,
+            session_id=getattr(body, "session_id", "default"),
+        )
+
+        yield json.dumps({
+            "type": "qg_job",
+            "job_id": job_id,
+            "poll_url": f"/api/chat/qg/{job_id}",
+        })
 
     async def chat_with_followup_pipeline(self, body: ChatBody):
         """
@@ -83,8 +145,8 @@ class ChatService:
 
         # ---- Step 3: Generate follow-up questions ----
         try:
-            followup_questions = await self.qg_service.generate_questions(
-                seed_question=body.query_text,
+            followup_questions = await self.question_generator_service.generate_questions(
+                prompt=body.query_text,
                 contexts=contexts,
                 lang=body.lang,
                 history_block=history_block,

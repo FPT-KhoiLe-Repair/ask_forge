@@ -34,13 +34,29 @@ async def chat(
         })
 @router.post("/chat/stream")
 async def chat_stream(
-        chat_body: ChatBody, # Đây sẽ là JSON type
+        chat_body: ChatBody,
         chat_service: ChatService = Depends(get_chat_service),
 ):
     chat_body.index_name = format_index_name(chat_body.index_name)
-    gen = chat_service.chat_stream(body=chat_body)
-    return StreamingResponse(gen, media_type="application/octet-stream")
 
+    async def event_generator():
+        """SSE format: data: {json}\n\n"""
+        try:
+            async for chunk in chat_service.chat_stream_sse(body=chat_body):
+                yield f"data: {chunk}\n\n"
+        except Exception as e:
+            yield f"data: {{'error': '{str(e)}'}}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"  # Nginx proxy fix
+        }
+    )
 # ============================================================
 # Request/Response checkpoints
 # ============================================================

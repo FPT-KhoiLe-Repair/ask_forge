@@ -1,6 +1,17 @@
 import logging
 import logging.config
 import sys
+import uuid
+from contextvars import ContextVar
+
+request_id_var: ContextVar[str] = ContextVar("requests_id", default="")
+
+class RequestIDFilter(logging.Filter):
+    def filter(self, record):
+        record.request_id = request_id_var.get()
+        return True
+# TODO: Thêm vào formatter:
+# "%(asctime)s | %(request_id)s | %(levelname)s | %(name)s | %(message)s"
 
 def setup_logging(level: int = logging.INFO) -> None:
     """
