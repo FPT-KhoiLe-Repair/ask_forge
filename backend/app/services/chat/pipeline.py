@@ -139,10 +139,11 @@ async def stream_answer_llm(
     **context
 ) -> AsyncIterator[str]:
     """Streaming qua Router"""
+
     provider = await app_state.llm_router.route({
         "task": task,
         **context
-    }) # M có thể vào trong route để kiểm tra và xem các thông số đầu vào có thể nhận, ở đây ta nhận task
+    }) # M có thể vào trong route để kiểm `tra và xem các thông số đầu vào có thể nhận, ở đây ta nhận task
 
     async for chunk in provider.generate_stream(prompt):
         yield chunk

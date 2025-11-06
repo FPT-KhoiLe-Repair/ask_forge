@@ -25,20 +25,20 @@ class GeminiAdapter(LLMProvider):
         return getattr(response, "text", "")
 
     async def generate_stream(self, prompt: str, **kwargs) -> AsyncIterator[str]:
-        loop = asyncio.get_running_loop()
-
-        def _sync_stream():
+        def sync_gen():
+            """Sync generator (Gemini SDK chạy blocking)"""
             stream = self._client.models.generate_content_stream(
                 model=self._model_name,
-                contents=prompt
+                contents=prompt,
             )
             for event in stream:
                 chunk = getattr(event, "text", None)
                 if chunk:
                     yield chunk
 
-        # Wrap sync generator → async
-        for chunk in await loop.run_in_executor(None, lambda: list(_sync_stream())):
+        # Dùng to_thread để chạy sync_gen trong thread riêng
+        # và yield từng phần tử ra async
+        for chunk in await asyncio.to_thread(lambda: list(sync_gen())):
             yield chunk
 
     @property

@@ -12,16 +12,13 @@ import { getTranslation } from "@/lib/translations"
 import { ChatMessage } from "@/components/chat-message"
 import { FollowupPills } from "@/components/followup_questions_pill"
 import { PromptSuggestions } from "@/components/prompt-suggestions"
-import { chatAPI, chatStreamAPI, type ChatContext } from "@/app/api/chat"
+import { chatStreamAPI, type ChatContext } from "@/app/api/chat"
 import { useToast } from "@/hooks/use-toast"
-import { ca } from "date-fns/locale"
-import { set } from "date-fns"
 
 export function ChatPanel() {
   const {
     language,
     indexName,
-    indexStatus,
     messages,
     addMessage,
     saveChatHistory,
@@ -35,15 +32,15 @@ export function ChatPanel() {
   const { toast } = useToast()
   const [input, setInput] = useState("")
   const [followupQuestions, setFollowupQuestions] = useState<string[]>([])
-  
-  // khi người dùng gõ, clear gợi ý (tránh cũ dính sang câu sau)
+
+  // when user types, clear stale followups
   const onInputChange = (v: string) => {
     setInput(v)
     if (followupQuestions.length > 0) setFollowupQuestions([])
   }
+
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState("")
-  const [useStreaming, setUseStreaming] = useState(false) // Toggle streaming mode
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const t = (key: Parameters<typeof getTranslation>[1]) => getTranslation(language, key)
@@ -57,111 +54,94 @@ export function ChatPanel() {
   }, [messages, streamingContent])
 
   // ============================================================
-  // NON-STREAMING HANDLER
-  // ============================================================
-
-  const handleSendNonStreaming = async (userMessage: string) => {
-    try {
-      setIsStreaming(true)
-
-      // Show loading thoughts
-      setModelThoughts(
-        language === "en"
-          ? "Searching through documents...\n\nAnalyzing context...\n\nFormulating response..."
-          : "Đang tìm kiếm trong tài liệu...\n\nPhân tích ngữ cảnh...\n\nĐang xây dựng câu trả lời...",
-      )
-
-      const response = await chatAPI(userMessage, indexName)
-
-      // Set follow-up questions
-      setFollowupQuestions(response.followup_questions ?? [])
-
-      // Format contets for thoughts panel
-      const contextSummary = response.contexts
-        .map(
-          (ctx: ChatContext, idx: number) =>
-            `[${idx + 1}]${ctx.source} (page ${ctx.page}) - Score: ${ctx.score.toFixed(2)}\n${ctx.preview}`,
-        ).join("\n\n")
-        
-      setModelThoughts(
-        `Model: ${response.model}` +
-        `Found ${response.contexts.length} relevant contexts: \n\n`+
-        contextSummary
-      )
-
-      // Add assistant response
-      addMessage({
-        role: "assistant",
-        content: response.answer,
-      })
-    } catch (error: any) {
-      console.error("Chat error:", error)
-      toast({
-        title: language === "en" ? "Error" : "Lỗi",
-        description: error.message || "Failed to get response",
-        variant: "destructive",
-      })
-
-      // Add error message
-      addMessage({
-        role: "assistant",
-        content:
-          language === "en"
-            ? `❌ Sorry, I encountered an error: ${error.message}`
-            : `❌ Xin lỗi, đã xảy ra lỗi: ${error.message}`,
-      })
-    } finally {
-      setIsStreaming(false)
-    }
-  }
-  
-  // ============================================================
-  // STREAMING HANDLER
+  // STREAMING HANDLER (SSE)
   // ============================================================
   const handleSendStreaming = async (userMessage: string) => {
     try {
       setIsStreaming(true)
       setStreamingContent("")
 
-      // Show loading thoughts
+      // loading thoughts
       setModelThoughts(
         language === "en"
           ? "Searching through documents...\n\nAnalyzing context...\n\nFormulating response..."
-          : "Đang tìm kiếm trong tài liệu...\n\nPhân tích ngữ cảnh...\n\nĐang xây dựng câu trả lời..."
+          : "Đang tìm kiếm trong tài liệu...\n\nPhân tích ngữ cảnh...\n\nĐang xây dựng câu trả lời...",
       )
-      await chatStreamAPI(
-        userMessage,
-        indexName,
-        // onChunk: accumulate streaming content
-        (chunk) => {
-          setStreamingContent((prev) => prev + chunk)
+
+      // helper (fallback) nếu backend trả qg_job thay vì followup_questions
+      const pollQG = async (pollUrl: string, tries = 0) => {
+        try {
+          const res = await fetch(pollUrl)
+          if (!res.ok) return
+          const data = await res.json()
+          // expect { status: "done" | "pending", followup_questions?: string[] }
+          if (data?.status === "done" && Array.isArray(data?.followup_questions)) {
+            setFollowupQuestions(data.followup_questions)
+            return
+          }
+          if (tries < 20) setTimeout(() => pollQG(pollUrl, tries + 1), 1500)
+        } catch (e) {
+          console.warn("QG polling error", e)
+        }
+      }
+
+      await chatStreamAPI(userMessage, indexName!, {
+        onToken: (token) => setStreamingContent((prev) => prev + token),
+
+        onContexts: (ctxs) => {
+          const summary = ctxs
+            .map(
+              (ctx: ChatContext, idx: number) =>
+                `[${idx + 1}] ${ctx.source} (page ${ctx.page}) - Score: ${ctx.score.toFixed(2)}\n${ctx.preview}`,
+            )
+            .join("\n\n")
+          setModelThoughts(
+            (language === "en"
+              ? "Streaming... Found relevant contexts:\n\n"
+              : "Đang truyền... Đã tìm thấy ngữ cảnh liên quan:\n\n") + summary,
+          )
         },
-        // onComplete: save the full message
-        () => {
-          addMessage({
-            role: "assistant",
-            content: streamingContent,
-          })
-          setStreamingContent("")
+
+        // NEW: nhận trực tiếp follow-up từ SSE (khớp example usage)
+        onFollowupQuestions: (questions) => {
+          setFollowupQuestions(Array.isArray(questions) ? questions : [])
+        },
+
+        onQGJob: (jobId, pollUrl) => {
+          const current = (useStore.getState() as any).modelThoughts ?? ""
+          const extra =
+            "\n" +
+            (language === "en"
+              ? `Generating follow-up questions (job: ${jobId})...`
+              : `Đang tạo câu hỏi gợi ý (job: ${jobId})...`)
+          setModelThoughts(current + extra)
+          void pollQG(pollUrl)
+        },
+
+        onComplete: () => {
           setIsStreaming(false)
+          // tránh stale-closure: lấy final buffer ngay trong setter
+          setStreamingContent((final) => {
+            addMessage({ role: "assistant", content: final })
+            return ""
+          })
         },
-        // onError: handle errors
-        (error) => {
+
+        // Không hạ cờ isStreaming ở đây để không “cắt” stream sớm (theo example)
+        onError: (error) => {
           console.error("Streaming chat error:", error)
           toast({
             title: language === "en" ? "Error" : "Lỗi",
             description: error.message,
             variant: "destructive",
           })
-          setStreamingContent("")
-          setIsStreaming(false)
-        }
-      )
+        },
+      })
     } catch (error: any) {
-      console.error("Stream Chat error:", error)
+      console.error("Stream Chat error (fatal):", error)
       toast({
         title: language === "en" ? "Error" : "Lỗi",
-        description: error.message,
+        description: error?.message,
         variant: "destructive",
       })
       setIsStreaming(false)
@@ -169,47 +149,38 @@ export function ChatPanel() {
   }
 
   // ============================================================
-  // UNIFIED SEND HANDLER
+  // UNIFIED SEND HANDLER (always streaming)
   // ============================================================
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return
 
-    // Check if index is ready
-    if (indexStatus === "ready") {
+    if (!indexName) {
       toast({
-        title: language === "en" ? "Index not ready" : "Chỉ mục chưa sẵn sàng",
-        description: language === "en"
-          ? "Please build or load an index first before chatting."
-          : "Vui lòng xây dựng hoặc tải một chỉ mục trước khi trò chuyện.",
+        title: language === "en" ? "No index selected" : "Chưa chọn chỉ mục",
+        description:
+          language === "en" ? "Please select or build an index first." : "Vui lòng chọn hoặc xây dựng chỉ mục trước.",
         variant: "destructive",
       })
       return
     }
-    
+
     const userMessage = input.trim()
     setInput("")
 
-    // Add user message
     addMessage({ role: "user", content: userMessage })
 
-    // Open right panel on first prompts
     if (!hasSentFirstPrompt) {
       setHasSentFirstPrompt(true)
       if (!rightOpen) setRightOpen(true)
     }
 
-    // Choose streaming or non-streaming handler
-    if (useStreaming) {
-      await handleSendStreaming(userMessage)
-    } else {
-      await handleSendNonStreaming(userMessage)
-    }
+    await handleSendStreaming(userMessage)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      void handleSend()
     }
   }
 
@@ -230,9 +201,7 @@ export function ChatPanel() {
                 {language === "en" ? "Start a conversation" : "Bắt đầu cuộc trò chuyện"}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {language === "en" 
-                  ? "Ask questions about your PDF documents" 
-                  : "Đặt câu hỏi về tài liệu PDF của bạn"}
+                {language === "en" ? "Ask questions about your PDF documents" : "Đặt câu hỏi về tài liệu PDF của bạn"}
               </p>
             </div>
           </div>
@@ -241,7 +210,7 @@ export function ChatPanel() {
             {messages.map((message) => (
               <ChatMessage key={message.id} message={message} />
             ))}
-            
+
             {/* Streaming message preview */}
             {isStreaming && streamingContent && (
               <div className="flex gap-3 rounded-lg border border-border bg-card p-4">
@@ -258,7 +227,7 @@ export function ChatPanel() {
               </div>
             )}
 
-            {/* Loading indicator for non-streaming */}
+            {/* Idle “thinking” dots (đầu stream chưa có token) */}
             {isStreaming && !streamingContent && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="flex gap-1">
@@ -269,7 +238,7 @@ export function ChatPanel() {
                 <span>{language === "en" ? "Thinking..." : "Đang suy nghĩ..."}</span>
               </div>
             )}
-            
+
             <div ref={messagesEndRef} />
           </div>
         )}
@@ -279,12 +248,13 @@ export function ChatPanel() {
       <div className="border-t border-border bg-card/80 p-4 backdrop-blur-sm">
         <div className="mx-auto max-w-3xl space-y-4">
           {/* Follow-up Question Pills */}
-          <FollowupPills 
-          items={followupQuestions} 
-          onPick={(q) => {
-            setInput(q)
-            textareaRef.current?.focus()
-          }} />
+          <FollowupPills
+            items={followupQuestions}
+            onPick={(q) => {
+              setInput(q)
+              textareaRef.current?.focus()
+            }}
+          />
           <PromptSuggestions onSuggestionClick={handleSuggestionClick} />
 
           {/* Settings */}
@@ -295,20 +265,13 @@ export function ChatPanel() {
                 {t("saveChatHistory")}
               </Label>
             </div>
-
-            <div className="flex items-center gap-2">
-              <Switch id="use-streaming" checked={useStreaming} onCheckedChange={setUseStreaming} />
-              <Label htmlFor="use-streaming" className="text-xs text-muted-foreground">
-                {language === "en" ? "Stream response" : "Truyền phản hồi"}
-              </Label>
-            </div>
           </div>
 
           <div className="flex gap-2">
             <Textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => onInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t("typeMessage")}
               className="min-h-[60px] resize-none rounded-2xl bg-background/80 backdrop-blur-sm"
@@ -316,7 +279,7 @@ export function ChatPanel() {
             />
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || isStreaming || indexStatus === "ready"}
+              disabled={!input.trim() || isStreaming || !indexName}
               size="icon"
               className="h-[60px] w-[60px] shrink-0 rounded-2xl bg-gradient-primary hover:opacity-90"
             >

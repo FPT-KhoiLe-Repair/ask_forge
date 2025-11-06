@@ -1,4 +1,8 @@
-def generate_questions_task(seed_question, contexts, lang, session_id):
+def generate_questions_task(
+        seed_question,
+        contexts,
+        lang,
+        session_id):
     """RQ worker task - chạy sync"""
     from ask_forge.backend.app.core.app_state import get_app_state
     from ask_forge.backend.app.services.qg.service import QGService

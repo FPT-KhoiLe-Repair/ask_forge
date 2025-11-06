@@ -1,9 +1,10 @@
 """
 Chat/Query routes - sử dụng ChromaDB để retrieve context cho RAG.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-
+import json
+import asyncio
 from ask_forge.backend.app.services.chat.service import ChatService
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
 from ask_forge.backend.app.api.dependencies import get_chroma_repo, get_chat_service
@@ -34,19 +35,43 @@ async def chat(
         })
 @router.post("/chat/stream")
 async def chat_stream(
-        chat_body: ChatBody,
-        chat_service: ChatService = Depends(get_chat_service),
+    chat_body: ChatBody,
+    request: Request,
+    chat_service: ChatService = Depends(get_chat_service),
 ):
     chat_body.index_name = format_index_name(chat_body.index_name)
+    return await chat_service.chat_stream_sse(body=chat_body)
+
+    def sse_encode(payload) -> str:
+        # Mỗi event phải kết thúc bằng \n\n
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     async def event_generator():
-        """SSE format: data: {json}\n\n"""
         try:
+            # ❌ Sai: async for chunk in await chat_service.chat_stream_sse(...)
+            # ✅ Đúng:
             async for chunk in chat_service.chat_stream_sse(body=chat_body):
-                yield f"data: {chunk}\n\n"
+                # Nếu client đóng kết nối thì dừng
+                if await request.is_disconnected():
+                    break
+
+                # chunk có thể là string token hoặc dict đã format sẵn
+                if isinstance(chunk, (dict, list)):
+                    yield sse_encode(chunk)
+                else:
+                    # gói lại thành event "token"
+                    yield sse_encode({"type": "token", "content": str(chunk)})
+
+            # Kết thúc bình thường
+            yield "data: [DONE]\n\n"
+
+        except asyncio.CancelledError:
+            # Client hủy kết nối: thoát im lặng (Starlette sẽ đóng response)
+            raise
+
         except Exception as e:
-            yield f"data: {{'error': '{str(e)}'}}\n\n"
-        finally:
+            # Báo lỗi đúng chuẩn JSON + SSE
+            yield sse_encode({"type": "error", "content": str(e)})
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(
@@ -54,8 +79,9 @@ async def chat_stream(
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"  # Nginx proxy fix
-        }
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # nếu đi qua Nginx
+        },
     )
 
 
