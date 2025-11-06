@@ -57,6 +57,36 @@ async def chat_stream(
             "X-Accel-Buffering": "no"  # Nginx proxy fix
         }
     )
+
+
+@router.get("/chat/qg/{job_id}")
+async def poll_qg_result(
+        job_id: str,
+        chat_service: ChatService = Depends(get_chat_service)
+):
+    """Frontend poll để lấy follow-up questions"""
+    try:
+        result = await chat_service.bq_queue.get_result(job_id)
+
+        if result is None:
+            return JSONResponse({
+                "status": "pending",
+                "job_id": job_id
+            })
+
+        return JSONResponse({
+            "status": "completed",
+            "job_id": job_id,
+            "questions": result
+        })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "failed",
+                "error": str(e)
+            }
+        )
 # ============================================================
 # Request/Response checkpoints
 # ============================================================

@@ -22,7 +22,7 @@ class GeminiAdapter(LLMProvider):
                 contents=prompt
             )
         )
-        return getattr(response, "text", "").strip()
+        return getattr(response, "text", "")
 
     async def generate_stream(self, prompt: str, **kwargs) -> AsyncIterator[str]:
         loop = asyncio.get_running_loop()

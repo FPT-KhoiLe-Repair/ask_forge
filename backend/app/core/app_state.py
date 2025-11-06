@@ -112,14 +112,15 @@ class AppState:
 
             # Question Generator Register
             if settings.HF_PRELOAD_AT_STARTUP:
-                question_generator_adapter = QuestionGeneratorAdapter(model_repo=settings.HF_QUESTION_GENERATOR_CKPT)
+                question_generator_adapter = QuestionGeneratorAdapter(settings.HF_QUESTION_GENERATOR_CKPT)
+
                 await question_generator_adapter._ensure_loaded() # Lệnh kích hoạt load Adapter/Model
                 self.llm_registry.register("question_generator_service", question_generator_adapter)
             else:
                 # Lazy: register nhưng chưa load
                 self.llm_registry.register(
                     "question_generator_service",
-                    QuestionGeneratorAdapter(model_repo=settings.HF_QUESTION_GENERATOR_CKPT)
+                    QuestionGeneratorAdapter(settings.HF_QUESTION_GENERATOR_CKPT)
                 )
 
             # Setup router policies

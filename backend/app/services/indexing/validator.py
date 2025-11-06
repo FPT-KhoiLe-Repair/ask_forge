@@ -1,1 +1,0 @@
-# Validate input files, index_name

@@ -1,1 +1,0 @@
-# thin wrapper gọi ChromaRepo

@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import List, Dict
 
-from ask_forge.backend.app.core.app_state import logger, AppState
+from ask_forge.backend.app.core.app_state import AppState
 from ask_forge.backend.app.services.qg.service import QGService
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
 from ask_forge.backend.app.services.chat.schemas import ChatBody, ChatResponse, ContextChunk, ChatTurn
@@ -21,11 +21,14 @@ from ask_forge.backend.app.services.chat_history.summary import generate_session
 import hashlib
 import secrets
 
+import logging
+logger = logging.getLogger(__name__)
+
 class ChatService:
     def __init__(self,app_state : AppState, repo: ChromaRepo):
         self.repo = repo
         self.app_state = app_state
-        self.question_generator_service = app_state.llm_registry.get("question_generator_service")
+        self.question_generator_service = app_state.llm_registry.get("question_generator_service") # llm_registered ở app_state
         self.chat_history = app_state.history_repo
         self.bq_queue = BackgroundQueue()
 
@@ -40,7 +43,7 @@ class ChatService:
     async def chat_stream_sse(self, body: ChatBody):
         """Generator trả SSE chunks"""
 
-        # 1. Retrieve (non-blocking)
+        # ===== 1. Retrieve contexts (non-blocking) =====
         contexts = await asyncio.to_thread(
             self._retrieve,
             index_name=body.index_name,
@@ -49,23 +52,36 @@ class ChatService:
             min_rel=body.min_rel,
         )
 
-        # 2. Stream answer
+        logger.info(f"📚 Retrieved {len(contexts)} contexts for streaming")
+
+        # ===== 2. Build prompt =====
         prompt = build_chat_prompt_from_template(
             question=body.query_text,
             contexts=contexts,
             lang=body.lang
         )
 
-        buffer = ""
-        async for chunk in stream_answer_llm(
-                prompt=prompt,
-                app_state=self.app_state,
-                task="chat"
-        ):
-            buffer += chunk
-            yield json.dumps({"type": "token", "content": chunk})
+        # ===== 3. Stream answer tokens =====
+        try:
+            async for chunk in stream_answer_llm(
+                    prompt=prompt,
+                    app_state=self.app_state,
+                    task="chat"
+            ):
+                if chunk:  # Skip empty chunks
+                    yield json.dumps({
+                        "type": "token",
+                        "content": chunk
+                    })
+        except Exception as e:
+            logger.exception("Streaming error")
+            yield json.dumps({
+                "type": "error",
+                "content": str(e)
+            })
+            return
 
-        # 3. Contexts (cuối stream)
+        # ===== 4. Send contexts (after answer complete) =====
         yield json.dumps({
             "type": "contexts",
             "data": [
@@ -79,20 +95,23 @@ class ChatService:
             ]
         })
 
-        # 4. Followup questions (background task - không chặn)
-        # TODO: sẽ làm ở bước 2.3
-        job_id = await self.bq_queue.enqueue_qg(
-            seed_question=body.query_text,
-            contexts=contexts,
-            lang=body.lang,
-            session_id=getattr(body, "session_id", "default"),
-        )
+        # ===== 5. Trigger QG background job =====
+        try:
+            job_id = await self.bq_queue.enqueue_qg(
+                seed_question=body.query_text,
+                contexts=contexts,
+                lang=body.lang,
+                session_id=getattr(body, "session_id", "default"),
+            )
 
-        yield json.dumps({
-            "type": "qg_job",
-            "job_id": job_id,
-            "poll_url": f"/api/chat/qg/{job_id}",
-        })
+            yield json.dumps({
+                "type": "qg_job",
+                "job_id": job_id,
+                "poll_url": f"/api/chat/qg/{job_id}"
+            })
+        except Exception as e:
+            logger.warning(f"QG job enqueue failed: {e}")
+            # Không crash stream nếu QG fail
 
     async def chat_with_followup_pipeline(self, body: ChatBody):
         """
@@ -130,7 +149,8 @@ class ChatService:
 
         # ---- Step 2: Build prompts & Generate Answer ----
         try:
-            answer_text, model_name = generate_answer_non_stream(
+            # TODO: Important! Không dùng chat/pipline nữa mà tích hợp thẳng sử dụng LLMProvider, lấy GeminiAdapter luôn, hoặc nếu cần gọi vào pipeline thì phải gọi LLMProvider trong pipeline.
+            answer_text, model_name = await generate_answer_non_stream(
                 question=body.query_text,
                 contexts=contexts,
                 lang=body.lang,
@@ -144,20 +164,19 @@ class ChatService:
             model_name = ""
 
         # ---- Step 3: Generate follow-up questions ----
-        try:
-            followup_questions = await self.question_generator_service.generate_questions(
+        if self.question_generator_service: # Xem generate ở question_generator.py
+            followup_questions = await self.question_generator_service.generate(
                 prompt=body.query_text,
                 contexts=contexts,
+                n=5,
                 lang=body.lang,
                 history_block=history_block,
                 summary_block=summary_block
-            ) #-> <quert_text> <<type>> <rsp1-n> <<type>>
-            seed_question = followup_questions[0]
-            followup_questions = followup_questions[1:]
-        except Exception as e:
-            logger.exception(e)
+            )
+            seed_question = body.query_text  # Keep original question
+        else:
             followup_questions = []
-            seed_question = ""
+            seed_question = body.query_text
 
         # ---- Step 4: Append USER turn to history (question) ----
         self.chat_history.append(

@@ -1,8 +1,10 @@
 from __future__ import annotations
-from typing import List, Dict, Iterable, Tuple, AsyncIterable, AsyncIterator
+from typing import List, Dict, Iterable, Tuple, AsyncIterable, AsyncIterator, Any, Coroutine
 
 from ask_forge.backend.app.core.app_state import AppState
 from ask_forge.backend.app.services.chat.schemas import ChatTurn, ContextChunk
+import logging
+logger = logging.getLogger(__name__)
 
 def build_history_context(chat_turns: List[ChatTurn]) -> str:
     """
@@ -54,15 +56,14 @@ def _normalize_contexts(contexts: List[Dict]) -> List[Dict]:
         })
     return normalized_contexts
 
-def answer_once_gemini(*, prompt: str, app_state:AppState) -> Tuple[str, str]:
-    """
-    Trả (answer_text, model_name) bằng Gemini. Dùng AppState để lấy client/model.
-    """
-    client = app_state.ensure_gemini_client()
-    model_name = app_state.get_gemini_model_name()
-    response = client.models.generate_content(model=model_name, contents=prompt)
-    text = getattr(response, "text", "") or "" # Text is answer_text
-    return text.strip(), model_name
+async def answer_once_gemini(*, prompt: str, app_state: AppState) -> Tuple[str, str]:
+    gemini_service = app_state.llm_registry.get("gemini_service")
+    model_name = gemini_service.model_name
+
+    text: str = await gemini_service.generate(prompt=prompt)  # await → str
+    # logger.debug("resp type=%s len=%d", type(text).__name__, len(text))  # optional
+
+    return (text or "").strip(), model_name
 
 def stream_answer_gemini(*, prompt:str, app_state:AppState) -> Iterable[str]:
     """
@@ -87,14 +88,14 @@ def build_chat_prompt_from_template(*, question: str, contexts: List[Dict], lang
     template = TPL.read_text(encoding="utf-8")
     return _render_prompt(template, question=question, contexts=contexts, lang=lang, history_block=history_block, summary_block=summary_block)
 
-def generate_answer_non_stream(*,
+async def generate_answer_non_stream(*,
                                question: str,
                                contexts: List[Dict],
                                lang: str,
                                app_state: AppState,
                                history_block: str = "",
                                summary_block: str = "",
-                               ) -> Tuple[str, str]:
+                               ) -> tuple[str, str]:
     prompt = build_chat_prompt_from_template(
         question=question,
         contexts=contexts,
@@ -102,7 +103,8 @@ def generate_answer_non_stream(*,
         history_block=history_block,
         summary_block=summary_block
     )
-    return answer_once_gemini(prompt=prompt,app_state=app_state)
+    answer_text, model_name = await answer_once_gemini(prompt=prompt,app_state=app_state)
+    return answer_text, model_name
 
 async def answer_once_llm(
     *,
