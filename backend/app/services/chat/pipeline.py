@@ -106,6 +106,15 @@ async def generate_answer_non_stream(*,
     answer_text, model_name = await answer_once_gemini(prompt=prompt,app_state=app_state)
     return answer_text, model_name
 
+"""
+NOTE: Về cơ bản thì ta thêm 2 cái hàm answer_once_llm và stream_answer_llm nhằm mục đích
+đồng bộ hóa hệ thống, thì về cơ bản thì ta có thể sử dụng cái này nếu như ta đang muốn llm
+của ta sinh ra dạng stream hay dạng once. Ví dụ như làm việc trực tiếp với người dùng, bot
+gen thì cứ dùng stream_answer, còn question generation thì có thể dùng once, nhưng sau này 
+với những con AI Agents thì vẫn có thể kết hợp dùng stream được.
+"""
+
+
 async def answer_once_llm(
     *,
     prompt: str,
@@ -113,6 +122,7 @@ async def answer_once_llm(
     task: str = "chat",
     **context
 ) -> Tuple[str, str]:
+    # TODO: Đồng bộ hóa hệ thống bằng cách dùng Router chọn LLM provider thay vì dùng generate_answer_non_stream như trên
     """Dùng Router chọn LLM provider"""
     provider = await app_state.llm_router.route({
         "task": task,
@@ -132,7 +142,8 @@ async def stream_answer_llm(
     provider = await app_state.llm_router.route({
         "task": task,
         **context
-    })
+    }) # M có thể vào trong route để kiểm tra và xem các thông số đầu vào có thể nhận, ở đây ta nhận task
+
     async for chunk in provider.generate_stream(prompt):
         yield chunk
 

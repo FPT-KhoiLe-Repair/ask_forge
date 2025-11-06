@@ -24,7 +24,7 @@ async def chat(
 ):
     try:
         chat_body.index_name = format_index_name(chat_body.index_name)
-        response = await chat_service.chat_with_followup_pipeline(chat_body)
+        response = await chat_service.chat_non_streaming(chat_body)
         return response.model_dump()
 
     except Exception as e:

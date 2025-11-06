@@ -48,13 +48,13 @@ class LLMRouter:
 # Ví dụ policies
 def prefer_local_for_qg(context: dict) -> Optional[str]:
     """Ưu tiên HF local cho QG (giảm cost)"""
-    if context.get("task") == "qg" and context.get("prefer_local"):
-        return "hf_qg"
+    if context.get("task") == "question_generation" and context.get("prefer_local"):
+        return "hf_question_generator_service"
     return None
 
 
 def prefer_gemini_for_chat(context: dict) -> Optional[str]:
     """Gemini cho chat (latency thấp, quality cao)"""
     if context.get("task") == "chat":
-        return "gemini"
+        return "gemini_service"
     return None

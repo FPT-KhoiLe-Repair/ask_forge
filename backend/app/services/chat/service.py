@@ -13,7 +13,7 @@ from ask_forge.backend.app.services.chat.pipeline import (
     generate_answer_stream,
     prepare_contexts_for_response,
     build_history_context,
-    build_system_memory_block, build_chat_prompt_from_template, stream_answer_llm
+    build_system_memory_block, build_chat_prompt_from_template, stream_answer_llm,
 )
 from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueue
 from ask_forge.backend.app.services.chat_history.summary import generate_session_summary
@@ -113,7 +113,7 @@ class ChatService:
             logger.warning(f"QG job enqueue failed: {e}")
             # Không crash stream nếu QG fail
 
-    async def chat_with_followup_pipeline(self, body: ChatBody):
+    async def chat_non_streaming(self, body: ChatBody):
         """
         Chat system logic: retrieve, answer, generate follow-ups.
         """
@@ -149,7 +149,6 @@ class ChatService:
 
         # ---- Step 2: Build prompts & Generate Answer ----
         try:
-            # TODO: Important! Không dùng chat/pipline nữa mà tích hợp thẳng sử dụng LLMProvider, lấy GeminiAdapter luôn, hoặc nếu cần gọi vào pipeline thì phải gọi LLMProvider trong pipeline.
             answer_text, model_name = await generate_answer_non_stream(
                 question=body.query_text,
                 contexts=contexts,
@@ -259,40 +258,3 @@ class ChatService:
             return summary_text.strip()
         except Exception as e:
             return ""
-
-    async def chat_once(self, body: ChatBody):
-        contexts = self._retrieve(
-            index_name=body.index_name,
-            query_text=body.query_text,
-            n_results=body.n_results,
-            min_rel=body.min_rel,
-        )
-        answer_text, model_name = generate_answer_non_stream(
-            question=body.query_text,
-            contexts=contexts,
-            lang=body.lang,
-            app_state=self.app_state,
-        )
-        return ChatResponse(
-            ok=True,
-            answer=answer_text or "Xin lỗi, mình chưa tìm được câu trả lời phù hợp từ context hiện có.",
-            contexts=[ContextChunk(**c,
-                                   preview=c.get("text", "")[:240])
-                      for c in prepare_contexts_for_response(contexts)],
-            followup_questions=[],
-            model_name=model_name,
-        )
-
-    def chat_stream(self, body: ChatBody):
-        contexts = self._retrieve(
-            index_name=body.index_name,
-            query_text=body.query_text,
-            n_results=body.n_results,
-            min_rel=body.min_rel,
-        )
-        return generate_answer_stream(
-            question=body.query_text,
-            contexts=contexts,
-            lang=body.lang,
-            app_state=self.app_state,
-        )

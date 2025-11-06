@@ -115,11 +115,11 @@ class AppState:
                 question_generator_adapter = QuestionGeneratorAdapter(settings.HF_QUESTION_GENERATOR_CKPT)
 
                 await question_generator_adapter._ensure_loaded() # Lệnh kích hoạt load Adapter/Model
-                self.llm_registry.register("question_generator_service", question_generator_adapter)
+                self.llm_registry.register("hf_question_generator_service", question_generator_adapter)
             else:
                 # Lazy: register nhưng chưa load
                 self.llm_registry.register(
-                    "question_generator_service",
+                    "hf_question_generator_service",
                     QuestionGeneratorAdapter(settings.HF_QUESTION_GENERATOR_CKPT)
                 )
 
