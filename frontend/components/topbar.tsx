@@ -19,7 +19,8 @@ export function Topbar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-primary">
             <span className="font-mono text-sm font-bold text-primary-foreground">AI</span>
           </div>
-          <h1 className="text-lg font-semibold">PDF Chatbot</h1>
+          <h1 className="text-lg font-semibold">Ask Forge - AI Question Generate System 
+E-Learning Support </h1>
           <Sparkles className="h-4 w-4 text-accent transition-transform hover:scale-110" />
         </div>
 

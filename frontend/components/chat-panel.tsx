@@ -57,26 +57,26 @@ export function ChatPanel() {
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-      if (isStreaming) {
+    if (isStreaming) {
       // Đang stream → ẩn pills để UI thoáng
       setShowPills(false)
       return
     }
     lastYRef.current = el.scrollTop
     const THRESH = 6
-    const BOTTOM_PAD = 16
+    const BOTTOM_PAD = 0
 
     const onScroll = () => {
       const y = el.scrollTop
       const delta = y - lastYRef.current
       lastYRef.current = y
 
-      const atBottom = Math.abs(el.scrollHeight - el.clientHeight - y) < BOTTOM_PAD
+      const atBottom = el.scrollHeight - el.clientHeight - y <= BOTTOM_PAD
 
       if (delta < -THRESH) {
         // đang cuộn lên
         setShowPills(false)
-      } else if (delta > THRESH || atBottom) {
+      } else if (atBottom) {
         // đang cuộn xuống hoặc đã về gần đáy
         setShowPills(true)
       }
@@ -157,7 +157,7 @@ export function ChatPanel() {
         // Nhận câu hỏi gợi ý từ chat.ts (sau khi poll xong)
         setFollowupQuestions: (qs) => {
           setFollowupQuestions(qs),
-          setQGLoading(false)
+            setQGLoading(false)
         },
       })
     } catch (error: any) {
@@ -266,7 +266,7 @@ export function ChatPanel() {
 
       <div className="border-t border-border bg-card/50 backdrop-blur-sm p-4 sm:p-6">
         <div className="mx-auto max-w-3xl space-y-4">
-          
+
           <AnimatePresence mode="popLayout">
             {qgLoading || (isStreaming && followupQuestions.length === 0) ? (
               // ===== Loader ở vị trí của FollowupPills =====
@@ -279,24 +279,15 @@ export function ChatPanel() {
                 className="flex items-center justify-between rounded-xl border border-border bg-card/60 backdrop-blur-sm px-4 py-3"
               >
                 <div className="flex items-center gap-3">
-                  <div className="relative h-7 w-7 rounded-lg bg-accent/15 ring-1 ring-accent/30 overflow-hidden">
-                    {/* ripple-ish thinking dots */}
-                    <div className="absolute inset-0 flex items-center justify-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:-0.2s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce [animation-delay:-0.1s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-accent animate-bounce" />
-                    </div>
+                  <div className="flex gap-1.5">
+                    <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
+                    <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
+                    <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary" />
                   </div>
-
-                    <div className="flex gap-1.5">
-                      <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
-                      <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
-                      <div className="h-2.5 w-2.5 animate-bounce rounded-full bg-primary" />
-                    </div>
-                    <span className="text-sm font-medium text-muted-foreground">
-                      {language === "en" ? "Generating Follow up Questions..." : "Đang suy nghĩ..."}
-                    </span>
-                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {language === "en" ? "Generating Follow up Questions..." : "Đang suy nghĩ..."}
+                  </span>
+                </div>
 
                 {/* shimmer bar */}
                 <div className="hidden sm:block h-2 w-28 rounded-full bg-muted overflow-hidden">
