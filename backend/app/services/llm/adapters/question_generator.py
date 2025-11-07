@@ -46,7 +46,7 @@ class QuestionGeneratorAdapter(LLMProvider):
                 tok = AutoTokenizer.from_pretrained(self.model_repo)
                 model = AutoModelForCausalLM.from_pretrained(
                     self.model_repo,
-                    torch_dtype=dtype,
+                    torch_dtype=torch.bfloat16,
                     device_map=settings.HF_DEVICE_MAP,
                 ).eval()
                 logger.info(f"✅ QG model loaded on {settings.HF_DEVICE_MAP}")
