@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 import json
 import asyncio
+
+from ask_forge.backend.app.core.app_state import app_state
 from ask_forge.backend.app.services.chat.service import ChatService
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
 from ask_forge.backend.app.api.dependencies import get_chroma_repo, get_chat_service
@@ -92,7 +94,7 @@ async def poll_qg_result(
 ):
     """Frontend poll để lấy follow-up questions"""
     try:
-        result = await chat_service.bq_queue.get_result(job_id)
+        result = await app_state.bq.get_result(job_id)
 
         if result is None:
             return JSONResponse({

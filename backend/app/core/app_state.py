@@ -23,11 +23,13 @@ from ask_forge.backend.app.services.llm.adapters.huggingface import HuggingFaceA
 
 from pathlib import Path
 
+from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueue
+
 logger = logging.getLogger(__name__)
 
 CORE_DIR = Path(__file__).resolve().parent  # …/backend/app/core
 APP_DIR = CORE_DIR.parent  # …/backend/app
-BACKEND_DIR = APP_DIR.parent  # …/backend
+BACKEND_DIR = APP_DIR.parent  #     …/backend
 PROJECT_ROOT = BACKEND_DIR.parent  # …/ask_forge
 
 class AppState:
@@ -62,7 +64,8 @@ class AppState:
 
         self.llm_registry: LLMRegistry = get_registry() # Đăng kí một singleton LLMRegistry
         self.llm_router = LLMRouter()
-
+        # Background Queue
+        self.bq = None
         # History repo
         self.history_repo = InMemoryHistoryRepo(
             default_last_k=12,
@@ -128,6 +131,10 @@ class AppState:
             self.llm_router.add_policy(prefer_local_for_qg)
 
             logger.info(f"✅ LLM providers ready: {self.llm_registry.list_providers()}")
+
+            self.bq = BackgroundQueue(
+                redis_url=settings.REDIS_URL,
+            )
 
             self._initialized = True
             logger.info("✅ All application resources started successfully")

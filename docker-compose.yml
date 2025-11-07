@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: askforge-redis
+    ports:
+      - "6379:6379"
+
+  rq-worker:
+    image: python:3.11-slim
+    container_name: askforge-rq
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    command: >
+      sh -c "pip install rq && rq worker -u redis://redis:6379/0 qg"

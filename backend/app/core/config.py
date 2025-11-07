@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     HF_TRUST_REMOTE_CODE: bool = Field(default=False)
     HF_PRELOAD_AT_STARTUP: bool = Field(default=True)
 
+    REDIS_URL: str = Field(default="redis://localhost:6379")
     # >>> Pydantic v2 config
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH),          # chính xác: core/.env

@@ -14,6 +14,7 @@ import { FollowupPills } from "@/components/followup_questions_pill"
 import { PromptSuggestions } from "@/components/prompt-suggestions"
 import { chatStreamAPI, type ChatContext } from "@/app/api/chat"
 import { useToast } from "@/hooks/use-toast"
+import { API_BASE } from "@/lib/config"
 
 export function ChatPanel() {
   const {
@@ -68,13 +69,13 @@ export function ChatPanel() {
           : "Đang tìm kiếm trong tài liệu...\n\nPhân tích ngữ cảnh...\n\nĐang xây dựng câu trả lời...",
       )
 
-      // helper (fallback) nếu backend trả qg_job thay vì followup_questions
+      // helper để poll qg_job
       const pollQG = async (pollUrl: string, tries = 0) => {
         try {
-          const res = await fetch(pollUrl)
+          const url = new URL(pollUrl, API_BASE).toString();
+          const res = await fetch(url);
           if (!res.ok) return
           const data = await res.json()
-          // expect { status: "done" | "pending", followup_questions?: string[] }
           if (data?.status === "done" && Array.isArray(data?.followup_questions)) {
             setFollowupQuestions(data.followup_questions)
             return
@@ -86,9 +87,13 @@ export function ChatPanel() {
       }
 
       await chatStreamAPI(userMessage, indexName!, {
-        onToken: (token) => setStreamingContent((prev) => prev + token),
+        onToken: (token) => {
+          console.log("📝 Token:", token.substring(0, 50))
+          setStreamingContent((prev) => prev + token)
+        },
 
         onContexts: (ctxs) => {
+          console.log("📚 Contexts:", ctxs.length)
           const summary = ctxs
             .map(
               (ctx: ChatContext, idx: number) =>
@@ -102,12 +107,8 @@ export function ChatPanel() {
           )
         },
 
-        // NEW: nhận trực tiếp follow-up từ SSE (khớp example usage)
-        onFollowupQuestions: (questions) => {
-          setFollowupQuestions(Array.isArray(questions) ? questions : [])
-        },
-
         onQGJob: (jobId, pollUrl) => {
+          console.log("🔄 QG Job:", jobId)
           const current = (useStore.getState() as any).modelThoughts ?? ""
           const extra =
             "\n" +
@@ -119,38 +120,41 @@ export function ChatPanel() {
         },
 
         onComplete: () => {
-          setIsStreaming(false)
-          // tránh stale-closure: lấy final buffer ngay trong setter
+          console.log("✅ Stream complete")
+          // Lưu message khi stream kết thúc
           setStreamingContent((final) => {
-            addMessage({ role: "assistant", content: final })
-            return ""
+            if (final.trim()) {
+              console.log("💾 Saving message, length:", final.length)
+              addMessage({ role: "assistant", content: final })
+            }
+            return "" // Clear streaming content
           })
+          setIsStreaming(false)
         },
 
-        // Không hạ cờ isStreaming ở đây để không “cắt” stream sớm (theo example)
         onError: (error) => {
-          console.error("Streaming chat error:", error)
+          console.error("❌ Stream error:", error)
           toast({
             title: language === "en" ? "Error" : "Lỗi",
             description: error.message,
             variant: "destructive",
           })
+          setIsStreaming(false)
+          setStreamingContent("")
         },
       })
     } catch (error: any) {
-      console.error("Stream Chat error (fatal):", error)
+      console.error("🔥 Fatal error:", error)
       toast({
         title: language === "en" ? "Error" : "Lỗi",
-        description: error?.message,
+        description: error?.message || "An unexpected error occurred",
         variant: "destructive",
       })
       setIsStreaming(false)
+      setStreamingContent("")
     }
   }
 
-  // ============================================================
-  // UNIFIED SEND HANDLER (always streaming)
-  // ============================================================
   const handleSend = async () => {
     if (!input.trim() || isStreaming) return
 
@@ -166,7 +170,6 @@ export function ChatPanel() {
 
     const userMessage = input.trim()
     setInput("")
-
     addMessage({ role: "user", content: userMessage })
 
     if (!hasSentFirstPrompt) {
@@ -191,7 +194,6 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-1 flex-col bg-background">
-      {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
@@ -211,7 +213,7 @@ export function ChatPanel() {
               <ChatMessage key={message.id} message={message} />
             ))}
 
-            {/* Streaming message preview */}
+            {/* Streaming preview - chỉ hiện khi đang stream */}
             {isStreaming && streamingContent && (
               <div className="flex gap-3 rounded-lg border border-border bg-card p-4">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent">
@@ -219,7 +221,7 @@ export function ChatPanel() {
                 </div>
                 <div className="flex-1 space-y-2">
                   <div className="text-sm font-medium">Assistant</div>
-                  <div className="text-sm leading-relaxed text-foreground">
+                  <div className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
                     {streamingContent}
                     <span className="animate-pulse">▊</span>
                   </div>
@@ -227,7 +229,7 @@ export function ChatPanel() {
               </div>
             )}
 
-            {/* Idle “thinking” dots (đầu stream chưa có token) */}
+            {/* Thinking indicator */}
             {isStreaming && !streamingContent && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="flex gap-1">
@@ -244,20 +246,20 @@ export function ChatPanel() {
         )}
       </div>
 
-      {/* Input Area */}
       <div className="border-t border-border bg-card/80 p-4 backdrop-blur-sm">
         <div className="mx-auto max-w-3xl space-y-4">
-          {/* Follow-up Question Pills */}
-          <FollowupPills
-            items={followupQuestions}
-            onPick={(q) => {
-              setInput(q)
-              textareaRef.current?.focus()
-            }}
-          />
-          <PromptSuggestions onSuggestionClick={handleSuggestionClick} />
+          {followupQuestions.length > 0 && (
+            <FollowupPills
+              items={followupQuestions}
+              onPick={(q) => {
+                setInput(q)
+                textareaRef.current?.focus()
+              }}
+            />
+          )}
+          
+          {messages.length === 0 && <PromptSuggestions onSuggestionClick={handleSuggestionClick} />}
 
-          {/* Settings */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Switch id="save-history" checked={saveChatHistory} onCheckedChange={setSaveChatHistory} />

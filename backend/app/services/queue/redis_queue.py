@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class BackgroundQueue:
-    def __init__(self, redis_url: str = "redis://localhost:6379"):
+    def __init__(self, redis_url: str = "redis://localhost:6379", qname: str = "qg"):
         # ✅ Dùng sync redis cho RQ
-        self.redis = redis.from_url(redis_url)
-        self.queue = Queue(connection=self.redis)
+        self.redis = redis.from_url(redis_url, decode_responses=False)
+        self.queue = Queue("qg",connection=self.redis)
         logger.info(f"✅ BackgroundQueue initialized: {redis_url}")
 
     async def enqueue_qg(

@@ -41,7 +41,6 @@ class ChatService:
         self.app_state = app_state
         self.question_generator_service = app_state.llm_registry.get("question_generator_service") # llm_registered ở app_state
         self.chat_history = app_state.history_repo
-        self.bq_queue = BackgroundQueue()
 
     def _retrieve(self, *, index_name: str, query_text: str, n_results: int = 3, min_rel: float = 0.5) -> List[Dict]:
         return self.repo.get_context_for_chat(
@@ -50,96 +49,6 @@ class ChatService:
             n_results=n_results,
             min_relevance=min_rel,
         )
-
-    async def chat_stream_sse(self, body: ChatBody):
-        """Generator trả SSE chunks theo chuẩn"""
-        async def event_gen():
-            try:
-                # ===== 1. Retrieve contexts (non-blocking) =====
-                contexts = await asyncio.to_thread(
-                    self._retrieve,
-                    index_name=body.index_name,
-                    query_text=body.query_text,
-                    n_results=body.n_results,
-                    min_rel=body.min_rel,
-                )
-
-
-                logger.info(f"📚 Retrieved {len(contexts)} contexts for streaming")
-                # Optional ping connection
-
-                # yield _sse({
-                #     "type": "ping",
-                #     "t": "start"
-                # })
-
-                # ===== 2. Build prompt =====
-                prompt = build_chat_prompt_from_template(
-                    question=body.query_text,
-                    contexts=contexts,
-                    lang=body.lang
-                )
-
-                # ===== 3. Stream answer tokens =====
-                async for chunk in stream_answer_llm(
-                        prompt=prompt,
-                        app_state=self.app_state,
-                        task="chat"
-                ):
-                    if chunk:  # Skip empty chunks
-                        yield _sse({
-                            "type": "token",
-                            "content": chunk,
-                        })
-
-                # ===== 4. Send contexts (after answer complete) =====
-                yield _sse({
-                    "type": "contexts",
-                    "data": [
-                        {
-                            "source": c.get("source"),
-                            "page": c.get("page"),
-                            "preview": c.get("text", "")[:200],
-                            "score": c.get("score")
-                        }
-                        for c in contexts
-                    ]
-                })
-
-                # ===== 5. Trigger QG background job =====
-                try:
-                    job_id = await self.bq_queue.enqueue_qg(
-                        seed_question=body.query_text,
-                        contexts=contexts,
-                        lang=body.lang,
-                        session_id=getattr(body, "session_id", "default"),
-                    )
-
-                    yield _sse({
-                        "type": "qg_job",
-                        "job_id": job_id,
-                        "poll_url": f"/api/chat/qg/{job_id}"
-                    })
-                except Exception as e:
-                    logger.warning(f"QG job enqueue failed: {e}")
-                    # Không crash stream nếu QG fail
-
-            except Exception as e:
-                logger.exception("Streaming error")
-                yield _sse({
-                    "type": "error",
-                    "content": str(e)
-                })
-            finally:
-                yield _sse("[DONE]")
-
-        # ==== HTTP response (bắt buộc cho SSE) ====
-        headers = {
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no", # tránh Nginx/nginx-ingress buffer
-        }
-        return StreamingResponse(event_gen(), media_type="text/event-stream", headers=headers)
 
     async def chat_non_streaming(self, body: ChatBody):
         """
@@ -268,6 +177,96 @@ class ChatService:
         )
         logger.info(f"✅ Chat complete | model={model_name} | followups={len(followup_questions)}")
         return results
+
+    async def chat_stream_sse(self, body: ChatBody):
+        """Generator trả SSE chunks theo chuẩn"""
+        async def event_gen():
+            try:
+                # ===== 1. Retrieve contexts (non-blocking) =====
+                contexts = await asyncio.to_thread(
+                    self._retrieve,
+                    index_name=body.index_name,
+                    query_text=body.query_text,
+                    n_results=body.n_results,
+                    min_rel=body.min_rel,
+                )
+
+
+                logger.info(f"📚 Retrieved {len(contexts)} contexts for streaming")
+                # Optional ping connection
+
+                # yield _sse({
+                #     "type": "ping",
+                #     "t": "start"
+                # })
+
+                # ===== 2. Build prompt =====
+                prompt = build_chat_prompt_from_template(
+                    question=body.query_text,
+                    contexts=contexts,
+                    lang=body.lang
+                )
+
+                # ===== 3. Stream answer tokens =====
+                async for chunk in stream_answer_llm(
+                        prompt=prompt,
+                        app_state=self.app_state,
+                        task="chat"
+                ):
+                    if chunk:  # Skip empty chunks
+                        yield _sse({
+                            "type": "token",
+                            "content": chunk,
+                        })
+
+                # ===== 4. Send contexts (after answer complete) =====
+                yield _sse({
+                    "type": "contexts",
+                    "data": [
+                        {
+                            "source": c.get("source"),
+                            "page": c.get("page"),
+                            "preview": c.get("text", "")[:200],
+                            "score": c.get("score")
+                        }
+                        for c in contexts
+                    ]
+                })
+
+                # ===== 5. Trigger QG background job =====
+                try:
+                    job_id = await self.app_state.bq.enqueue_qg(
+                        seed_question=body.query_text,
+                        contexts=contexts,
+                        lang=body.lang,
+                        session_id=getattr(body, "session_id", "default"),
+                    )
+
+                    yield _sse({
+                        "type": "qg_job",
+                        "job_id": job_id,
+                        "poll_url": f"/api/chat/qg/{job_id}"
+                    })
+                except Exception as e:
+                    logger.warning(f"QG job enqueue failed: {e}")
+                    # Không crash stream nếu QG fail
+
+            except Exception as e:
+                logger.exception("Streaming error")
+                yield _sse({
+                    "type": "error",
+                    "content": str(e)
+                })
+            finally:
+                yield _sse("[DONE]")
+
+        # ==== HTTP response (bắt buộc cho SSE) ====
+        headers = {
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no", # tránh Nginx/nginx-ingress buffer
+        }
+        return StreamingResponse(event_gen(), media_type="text/event-stream", headers=headers)
 
     async def _summarize_learning_flow(self, sess) -> str:
         """

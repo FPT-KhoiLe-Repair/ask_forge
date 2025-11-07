@@ -26,7 +26,6 @@ class GeminiAdapter(LLMProvider):
 
     async def generate_stream(self, prompt: str, **kwargs) -> AsyncIterator[str]:
         def sync_gen():
-            """Sync generator (Gemini SDK chạy blocking)"""
             stream = self._client.models.generate_content_stream(
                 model=self._model_name,
                 contents=prompt,
@@ -36,10 +35,9 @@ class GeminiAdapter(LLMProvider):
                 if chunk:
                     yield chunk
 
-        # Dùng to_thread để chạy sync_gen trong thread riêng
-        # và yield từng phần tử ra async
-        for chunk in await asyncio.to_thread(lambda: list(sync_gen())):
-            yield chunk
+        for chunk in sync_gen():  # chạy sync
+            yield chunk  # yield từng token ra ngoài (bắt SSE gửi ngay)
+            await asyncio.sleep(0)  # nhường event loop
 
     @property
     def model_name(self) -> str:

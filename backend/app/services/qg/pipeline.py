@@ -21,6 +21,7 @@ class HFQueryGenerator(__QueryGenerator):
                  lang: str = "vn",
                  history_block: str = "",
                  summary_block: str = "") -> List[str]:
+
         tok, model = app_state._hf_tok, app_state._hf_model
 
         user_prompt = build_queries_prompt_from_template(
