@@ -53,29 +53,6 @@ export type SSEErrorEvent = {
 export type SSEEvent = SSETokenEvent | SSEContextsEvent | SSEQGJobEvent | SSEErrorEvent;
 
 // ============================================================
-// Non-streaming chat API
-// ============================================================
-
-export async function chatAPI(
-    query: string,
-    indexName: string,
-): Promise<ChatRequest> {
-    const url = new URL(`${API_BASE}/api/chat`);
-    const response = await fetch(url.toString(), {
-        method: "POST",
-        headers: {"Content-Type": "application/json",},
-        body: JSON.stringify({ query_text: query, index_name: indexName }),
-    });
-
-    if (!response.ok) {
-        const errorData: ChatErrorResponse = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-
-    return response.json();
-}
-
-// ============================================================
 // Streaming chat API với SSE parsing
 // ============================================================
 
