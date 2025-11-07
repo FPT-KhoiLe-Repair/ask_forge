@@ -69,26 +69,52 @@ export function ChatPanel() {
           : "Đang tìm kiếm trong tài liệu...\n\nPhân tích ngữ cảnh...\n\nĐang xây dựng câu trả lời...",
       )
 
-      // helper để poll qg_job
+      // helper để poll qg_job - KHÔNG CÓ TIMEOUT
       const pollQG = async (pollUrl: string, tries = 0) => {
         try {
           const url = new URL(pollUrl, API_BASE).toString();
+          console.log(`🔄 Polling QG at (attempt ${tries + 1}):`, url);
           const res = await fetch(url);
-          if (!res.ok) return
-          const data = await res.json()
-          if (data?.status === "done" && Array.isArray(data?.followup_questions)) {
-            setFollowupQuestions(data.followup_questions)
-            return
+          
+          if (!res.ok) {
+            console.warn("⚠️ QG poll failed:", res.status);
+            return;
           }
-          if (tries < 20) setTimeout(() => pollQG(pollUrl, tries + 1), 1500)
+          
+          const data = await res.json();
+          console.log("📊 QG poll response:", data);
+          
+          // Nếu status là "done" và có followup_questions
+          if (data?.status === "done" && Array.isArray(data?.followup_questions)) {
+            console.log("✅ QG complete, questions:", data.followup_questions);
+            setFollowupQuestions(data.followup_questions);
+            return;
+          }
+          
+          // Nếu status là "pending", tiếp tục poll
+          if (data?.status === "pending") {
+            console.log("⏳ QG pending, retrying in 1.5s...");
+            setTimeout(() => pollQG(pollUrl, tries + 1), 1500);
+            return;
+          }
+          
+          // Nếu có error từ backend
+          if (data?.status === "error") {
+            console.error("❌ QG error from backend:", data.error);
+            return;
+          }
+          
         } catch (e) {
-          console.warn("QG polling error", e)
+          console.warn("❌ QG polling error:", e);
         }
       }
+
+      let fullContent = "";
 
       await chatStreamAPI(userMessage, indexName!, {
         onToken: (token) => {
           console.log("📝 Token:", token.substring(0, 50))
+          fullContent += token;
           setStreamingContent((prev) => prev + token)
         },
 
@@ -108,7 +134,7 @@ export function ChatPanel() {
         },
 
         onQGJob: (jobId, pollUrl) => {
-          console.log("🔄 QG Job:", jobId)
+          console.log("🔄 QG Job received:", jobId, pollUrl)
           const current = (useStore.getState() as any).modelThoughts ?? ""
           const extra =
             "\n" +
@@ -120,16 +146,18 @@ export function ChatPanel() {
         },
 
         onComplete: () => {
-          console.log("✅ Stream complete")
-          // Lưu message khi stream kết thúc
-          setStreamingContent((final) => {
-            if (final.trim()) {
-              console.log("💾 Saving message, length:", final.length)
-              addMessage({ role: "assistant", content: final })
-            }
-            return "" // Clear streaming content
-          })
+          console.log("✅ Stream complete, saving message...")
+          // Lưu message từ fullContent đã tích lũy
+          if (fullContent.trim()) {
+            console.log("💾 Saving message, length:", fullContent.length)
+            addMessage({ role: "assistant", content: fullContent })
+          }
+          // Giữ nguyên streamingContent để hiển thị cho đến khi clear
           setIsStreaming(false)
+          // Clear sau 100ms để tránh flickering
+          setTimeout(() => {
+            setStreamingContent("")
+          }, 100)
         },
 
         onError: (error) => {
@@ -214,16 +242,16 @@ export function ChatPanel() {
             ))}
 
             {/* Streaming preview - chỉ hiện khi đang stream */}
-            {isStreaming && streamingContent && (
+            {streamingContent && (
               <div className="flex gap-3 rounded-lg border border-border bg-card p-4">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent">
-                  <Sparkles className="h-5 w-5 animate-pulse text-accent-foreground" />
+                  <Sparkles className={`h-5 w-5 text-accent-foreground ${isStreaming ? 'animate-pulse' : ''}`} />
                 </div>
                 <div className="flex-1 space-y-2">
                   <div className="text-sm font-medium">Assistant</div>
                   <div className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
                     {streamingContent}
-                    <span className="animate-pulse">▊</span>
+                    {isStreaming && <span className="animate-pulse">▊</span>}
                   </div>
                 </div>
               </div>

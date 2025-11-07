@@ -15,7 +15,7 @@ from ask_forge.backend.app.services.chat.pipeline import (
     build_history_context,
     build_system_memory_block, build_chat_prompt_from_template, stream_answer_llm,
 )
-from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueue
+from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueueUsingRedis
 from ask_forge.backend.app.services.chat_history.summary import generate_session_summary
 
 import hashlib
@@ -197,7 +197,7 @@ class ChatService:
 
                 # yield _sse({
                 #     "type": "ping",
-                #     "t": "start"
+                #     "content": "start"
                 # })
 
                 # ===== 2. Build prompt =====
@@ -206,7 +206,10 @@ class ChatService:
                     contexts=contexts,
                     lang=body.lang
                 )
-
+                import os
+                log_path = "log.txt"
+                if not os.path.exists(log_path):
+                    open(log_path, "w", encoding="utf-8").close()
                 # ===== 3. Stream answer tokens =====
                 async for chunk in stream_answer_llm(
                         prompt=prompt,
@@ -214,10 +217,15 @@ class ChatService:
                         task="chat"
                 ):
                     if chunk:  # Skip empty chunks
+                        with open(log_path, "a", encoding="utf-8") as f:
+                            f.write(chunk)
                         yield _sse({
                             "type": "token",
                             "content": chunk,
                         })
+
+
+
 
                 # ===== 4. Send contexts (after answer complete) =====
                 yield _sse({
@@ -240,8 +248,11 @@ class ChatService:
                         contexts=contexts,
                         lang=body.lang,
                         session_id=getattr(body, "session_id", "default"),
+                        app_state=self.app_state,
                     )
-
+                    logger.info(job_id)
+                    # Yield for client to know where the job located (job_id), then the client need to call an API with the job_id
+                    # to get the question generate result
                     yield _sse({
                         "type": "qg_job",
                         "job_id": job_id,

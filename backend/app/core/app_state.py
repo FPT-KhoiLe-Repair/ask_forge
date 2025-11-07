@@ -23,7 +23,8 @@ from ask_forge.backend.app.services.llm.adapters.huggingface import HuggingFaceA
 
 from pathlib import Path
 
-from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueue
+from ask_forge.backend.app.services.queue.async_queue import AsyncBackgroundQueue
+from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueueUsingRedis
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +65,15 @@ class AppState:
 
         self.llm_registry: LLMRegistry = get_registry() # Đăng kí một singleton LLMRegistry
         self.llm_router = LLMRouter()
-        # Background Queue
-        self.bq = None
+
+        # # Background Queue Using Redis
+        # self.bq = BackgroundQueueUsingRedis(
+        #     redis_url=settings.REDIS_URL,
+        # )
+
+        # Use AsyncIO queue instead of Redis/RQ
+        self.bq = AsyncBackgroundQueue()
+
         # History repo
         self.history_repo = InMemoryHistoryRepo(
             default_last_k=12,
@@ -115,14 +123,18 @@ class AppState:
 
             # Question Generator Register
             if settings.HF_PRELOAD_AT_STARTUP:
-                question_generator_adapter = QuestionGeneratorAdapter(settings.HF_QUESTION_GENERATOR_CKPT)
+                question_generator_adapter = QuestionGeneratorAdapter(
+                    settings.HF_QUESTION_GENERATOR_CKPT
+                )
 
                 await question_generator_adapter._ensure_loaded() # Lệnh kích hoạt load Adapter/Model
-                self.llm_registry.register("hf_question_generator_service", question_generator_adapter)
+                self.llm_registry.register(
+                    "question_generator_service", question_generator_adapter
+                )
             else:
                 # Lazy: register nhưng chưa load
                 self.llm_registry.register(
-                    "hf_question_generator_service",
+                    "question_generator_service",
                     QuestionGeneratorAdapter(settings.HF_QUESTION_GENERATOR_CKPT)
                 )
 
@@ -131,10 +143,6 @@ class AppState:
             self.llm_router.add_policy(prefer_local_for_qg)
 
             logger.info(f"✅ LLM providers ready: {self.llm_registry.list_providers()}")
-
-            self.bq = BackgroundQueue(
-                redis_url=settings.REDIS_URL,
-            )
 
             self._initialized = True
             logger.info("✅ All application resources started successfully")
