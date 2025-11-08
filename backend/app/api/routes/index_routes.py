@@ -10,10 +10,11 @@ from ask_forge.backend.app.services.indexing.pipeline import build_index, add_to
 from ask_forge.backend.app.utils.naming import format_index_name
 from fastapi.responses import JSONResponse
 from typing import List
-
+import logging
 # ----------------------------------------------------------------------------------
 
 router = APIRouter(tags=["index"])
+logger = logging.getLogger(__name__)
 
 @router.post("/build_index", response_model=BuildIndexResponse)
 async def build_index_ep(
@@ -32,9 +33,11 @@ async def build_index_ep(
         return (JSONResponse
                 (status_code=400,
                  content={"ok": False, "error": "No files provided"}))
+    logger.info(f"Building index {index_name} with {len(files)} files.")
     try:
         all_chunks, metrics = await build_index(files, index_name, repo)
     except Exception as e:
+        logger.error(f"Error building index '{index_name}': {e}")
         return (JSONResponse(
             status_code=500,
             content={"ok": False, "error": str(e)}

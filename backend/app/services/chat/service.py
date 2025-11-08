@@ -5,21 +5,16 @@ import json
 from typing import List, Dict
 
 from ask_forge.backend.app.core.app_state import AppState
-from ask_forge.backend.app.services.qg.service import QGService
 from ask_forge.backend.app.repositories.vectorstore import ChromaRepo
-from ask_forge.backend.app.services.chat.schemas import ChatBody, ChatResponse, ContextChunk, ChatTurn
+from ask_forge.backend.app.services.chat.schemas import ChatBody
 from ask_forge.backend.app.services.chat.pipeline import (
-    generate_answer_non_stream,
-    generate_answer_stream,
     prepare_contexts_for_response,
     build_history_context,
     build_system_memory_block, build_chat_prompt_from_template, stream_answer_llm,
 )
-from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueueUsingRedis
+# from ask_forge.backend.app.services.queue.redis_queue import BackgroundQueueUsingRedis
 from ask_forge.backend.app.services.chat_history.summary import generate_session_summary
 
-import hashlib
-import secrets
 from fastapi.responses import StreamingResponse
 import logging
 logger = logging.getLogger(__name__)
@@ -50,134 +45,6 @@ class ChatService:
             min_relevance=min_rel,
         )
 
-    async def chat_non_streaming(self, body: ChatBody):
-        """
-        Chat system logic: retrieve, answer, generate follow-ups.
-        """
-        # Generate a random salt
-        salt = secrets.token_bytes(16)
-
-        # Data to be hashed (can be anything)
-        data = b"my secret message"
-
-        # Combine data and salt, then hash
-        hashed_data = hashlib.sha256(salt + data).hexdigest()
-
-        session_id = getattr(body, "session_id", hashed_data) #TODO: trong tương lai có thể dùng chat_session_id để lưu nhiều chat_session
-        user_id = getattr(body, "user_id", hashed_data) #TODO: tương tự, cái này để dành cho tương lai, còn cái này dùng các default option cho dễ
-
-        current_session = self.chat_history.get_or_create(session_id=session_id, user_id=user_id)
-
-
-        logger.info(f"🗣️ Chat request: {body.query_text} | index={body.index_name}")
-
-        # ---- Step 0: Build memory blocks ----
-        history_block = build_history_context(current_session.recent_pairs(current_session.last_k))
-        summary_block = build_system_memory_block(current_session.rolling_summary)
-
-        # ---- Step 1: Retrieve Context ----
-        contexts = self._retrieve(
-            index_name=body.index_name,
-            query_text=body.query_text,
-            n_results=body.n_results,
-            min_rel=body.min_rel,
-        )
-        logger.info(f"📚 Retrieved {len(contexts)} context chunks")
-
-        # ---- Step 2: Build prompts & Generate Answer ----
-        try:
-            answer_text, model_name = await generate_answer_non_stream(
-                question=body.query_text,
-                contexts=contexts,
-                lang=body.lang,
-                app_state=self.app_state,
-                history_block=history_block,
-                summary_block=summary_block
-            )
-        except Exception as e:
-            logger.exception(e)
-            answer_text = f"Xin lỗi, có lỗi khi truy vẫn mô hình:{e}"
-            model_name = ""
-
-        # ---- Step 3: Generate follow-up questions ----
-        if self.question_generator_service: # Xem generate ở question_generator.py
-            followup_questions = await self.question_generator_service.generate(
-                prompt=body.query_text,
-                contexts=contexts,
-                n=5,
-                lang=body.lang,
-                history_block=history_block,
-                summary_block=summary_block
-            )
-            seed_question = body.query_text  # Keep original question
-        else:
-            followup_questions = []
-            seed_question = body.query_text
-
-        # ---- Step 4: Append USER turn to history (question) ----
-        self.chat_history.append(
-            session_id=session_id,
-            chat_turn=ChatTurn(
-                role="user",
-                question=seed_question,
-                index_name=body.index_name,
-                contexts=None
-        ))
-
-        # ---- Step 5: Append ASSISTANT turn (answer) ----
-        self.chat_history.append(
-            session_id=session_id,
-            chat_turn=ChatTurn(
-                role="assistant",
-                answer_text=answer_text,
-                model_name=model_name,
-                index_name=body.index_name,
-                contexts=[ContextChunk(
-                    source=c.get("source"),
-                    page=c.get("page"),
-                    chunk_id=c.get("chunk_id"),
-                    preview=c.get("text","")[:240],
-                    text=c.get("text",""),
-                    score=c.get("score"),
-                ) for c in contexts],
-            )
-        )
-
-        # ---- (Optional) Update rolling summary mỗi N lượt ----
-        try:
-            if len(current_session.chat_turn) % 6 ==0:
-                # Tạo prompt tóm tắt lũy tiến từ history gần đây + summary cũ
-                new_summary = await self._summarize_learning_flow(current_session)
-                if new_summary:
-                    self.chat_history.set_summary(
-                        session_id=session_id,
-                        new_summary=new_summary
-                    )
-        except Exception as e:
-            logger.exception(f"Rolling summary update failed: {e}")
-
-        # ---- Step 6: Merge Response ---
-        contexts_serialized = [
-            ContextChunk(
-                source=c.get("source"),
-                page=c.get("page"),
-                chunk_id=c.get("chunk_id"),
-                preview=c.get("text", "")[:240],
-                text=c.get("text",""),
-                score=c.get("score"),
-            )
-            for c in contexts
-        ]
-        results = ChatResponse(
-            ok=True,
-            answer=answer_text or "Xin lỗi, mình chưa tìm được câu trả lời phù hợp từ context hiện có.",
-            contexts=contexts_serialized,
-            followup_questions=followup_questions,
-            model_name=model_name,
-        )
-        logger.info(f"✅ Chat complete | model={model_name} | followups={len(followup_questions)}")
-        return results
-
     async def chat_stream_sse(self, body: ChatBody):
         """Generator trả SSE chunks theo chuẩn"""
         async def event_gen():
@@ -206,10 +73,7 @@ class ChatService:
                     contexts=contexts,
                     lang=body.lang
                 )
-                import os
-                log_path = "log.txt"
-                if not os.path.exists(log_path):
-                    open(log_path, "w", encoding="utf-8").close()
+
                 # ===== 3. Stream answer tokens =====
                 async for chunk in stream_answer_llm(
                         prompt=prompt,
@@ -217,15 +81,10 @@ class ChatService:
                         task="chat"
                 ):
                     if chunk:  # Skip empty chunks
-                        with open(log_path, "a", encoding="utf-8") as f:
-                            f.write(chunk)
                         yield _sse({
                             "type": "token",
                             "content": chunk,
                         })
-
-
-
 
                 # ===== 4. Send contexts (after answer complete) =====
                 yield _sse({
@@ -278,6 +137,7 @@ class ChatService:
             "X-Accel-Buffering": "no", # tránh Nginx/nginx-ingress buffer
         }
         return StreamingResponse(event_gen(), media_type="text/event-stream", headers=headers)
+        # StreamingResponse Receive AsyncIterable object to return streaming response.
 
     async def _summarize_learning_flow(self, sess) -> str:
         """

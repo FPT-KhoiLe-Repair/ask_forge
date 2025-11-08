@@ -18,18 +18,6 @@ class Chunk(BaseModel):
     chunk_id: str = Field(..., description="Unique identifier for the chunk.")
 
 
-class DocumentChunks(BaseModel):
-    """
-    A collection of chunks that all come from the same source document.
-
-    Attributes:
-        source: A string that identifies where the chunks came from (filename, URL, S3 path, etc).
-        content: A list of Chunk objects extracted from the source.
-    """
-    source: str = Field(..., description="Source identifier (filename, URL, S3 path, ...).")
-    content: List[Chunk] = Field(..., description="List of chunks extracted from the source.")
-
-
 class Metrics(BaseModel):
     """
     Simple metrics summary describing indexing results.

@@ -55,6 +55,7 @@ export function ChatPanel() {
 
 
   useEffect(() => {
+    scrollToBottom()
     const el = scrollRef.current
     if (!el) return
     if (isStreaming) {
@@ -83,6 +84,7 @@ export function ChatPanel() {
     }
 
     el.addEventListener("scroll", onScroll, { passive: true })
+    scrollToBottom()
     return () => el.removeEventListener("scroll", onScroll)
   }, [])
 

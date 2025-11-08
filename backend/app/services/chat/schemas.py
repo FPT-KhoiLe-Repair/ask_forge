@@ -34,7 +34,7 @@ class ChatBody(BaseModel):
     query_text: str = Field(..., description="Câu hỏi của người dùng")
     index_name: str = Field(..., description="Tên index trong Chroma")
     lang: str = Field(default="vietnamese", description="Ngôn ngữ đầu ra (vietnamese/english)")
-    n_results: int = Field(default=10)
+    n_results: int = Field(default=75)
     min_rel: float = Field(default=0.2)
     # TODO: Xử lý lang theo origin_language của query
 

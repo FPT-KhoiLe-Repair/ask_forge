@@ -117,7 +117,6 @@ class AsyncBackgroundQueue:
             return job["result"]
         elif status == "failed":
             raise RuntimeError(f"Job ID: {job_id} failed")
-
         # pending
         return None
 

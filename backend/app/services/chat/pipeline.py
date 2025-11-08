@@ -65,71 +65,12 @@ async def answer_once_gemini(*, prompt: str, app_state: AppState) -> Tuple[str, 
 
     return (text or "").strip(), model_name
 
-def stream_answer_gemini(*, prompt:str, app_state:AppState) -> Iterable[str]:
-    """
-    Generator stream text dần dần (chunked plain text)
-    """
-    client = app_state.ensure_gemini_client()
-    model_name = app_state.get_gemini_model_name()
-    stream = client.models.generate_content_stream(model=model_name, contents=prompt)
-    for event in stream:
-        # google.genai trả nhiều loại sự kiện; text thường nằm ở event.text
-        chunk = getattr(event, "text", None)
-        if chunk:
-            yield chunk
-
-    # Kết thúc
-    yield ""
-
 def build_chat_prompt_from_template(*, question: str, contexts: List[Dict], lang: str, history_block: str = "", summary_block: str = "") -> str:
     # Đọc template từ file (đọc mỗi lần cho đơn giản; nếu muốn có thể cache)
     from pathlib import Path
     TPL = Path(__file__).resolve().parent / "prompts" / "chat_prompt.txt"
     template = TPL.read_text(encoding="utf-8")
     return _render_prompt(template, question=question, contexts=contexts, lang=lang, history_block=history_block, summary_block=summary_block)
-
-async def generate_answer_non_stream(*,
-                               question: str,
-                               contexts: List[Dict],
-                               lang: str,
-                               app_state: AppState,
-                               history_block: str = "",
-                               summary_block: str = "",
-                               ) -> tuple[str, str]:
-    prompt = build_chat_prompt_from_template(
-        question=question,
-        contexts=contexts,
-        lang=lang,
-        history_block=history_block,
-        summary_block=summary_block
-    )
-    answer_text, model_name = await answer_once_gemini(prompt=prompt,app_state=app_state)
-    return answer_text, model_name
-
-"""
-NOTE: Về cơ bản thì ta thêm 2 cái hàm answer_once_llm và stream_answer_llm nhằm mục đích
-đồng bộ hóa hệ thống, thì về cơ bản thì ta có thể sử dụng cái này nếu như ta đang muốn llm
-của ta sinh ra dạng stream hay dạng once. Ví dụ như làm việc trực tiếp với người dùng, bot
-gen thì cứ dùng stream_answer, còn question generation thì có thể dùng once, nhưng sau này 
-với những con AI Agents thì vẫn có thể kết hợp dùng stream được.
-"""
-
-
-async def answer_once_llm(
-    *,
-    prompt: str,
-    app_state: AppState,
-    task: str = "chat",
-    **context
-) -> Tuple[str, str]:
-    # TODO: Đồng bộ hóa hệ thống bằng cách dùng Router chọn LLM provider thay vì dùng generate_answer_non_stream như trên
-    """Dùng Router chọn LLM provider"""
-    provider = await app_state.llm_router.route({
-        "task": task,
-        **context
-    })
-    text = await provider.generate(prompt)
-    return text.strip(), provider.model_name
 
 async def stream_answer_llm(
     *,
@@ -148,14 +89,5 @@ async def stream_answer_llm(
     async for chunk in provider.generate_stream(prompt):
         yield chunk
 
-def generate_answer_stream(*, question: str, contexts: List[Dict], lang: str, app_state: AppState) -> Iterable[str]:
-    prompt = build_chat_prompt_from_template(
-        question=question,
-        contexts=contexts,
-        lang=lang,
-    )
-    return stream_answer_gemini(prompt=prompt, app_state=app_state)
-
 def prepare_contexts_for_response(contexts: List[Dict]) -> List[Dict]:
     return _normalize_contexts(contexts)
-

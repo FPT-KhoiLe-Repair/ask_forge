@@ -1,21 +1,6 @@
 import re
 
 def format_index_name(raw_name: str, prefix: str = "askforge_") -> str:
-    """
-    Chuẩn hóa index_name từ user để phù hợp với quy tắc của ChromaDB.
-
-    - Loại bỏ ký tự đặc biệt, chỉ giữ [a-zA-Z0-9._-]
-    - Thay khoảng trắng bằng "_"
-    - Đảm bảo bắt đầu & kết thúc bằng ký tự hợp lệ
-    - Thêm prefix nếu chưa có
-
-    Args:
-        raw_name (str): tên index gốc từ người dùng
-        prefix (str): tiền tố hệ thống (mặc định là "askforge_")
-
-    Returns:
-        str: Tên hợp lệ theo chuẩn ChromaDB
-    """
     if not raw_name:
         raise ValueError("Index name cannot be empty")
 

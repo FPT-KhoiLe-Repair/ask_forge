@@ -22,10 +22,6 @@ def get_app_state(request: Request) -> AppState:
         raise HTTPException(status_code=503, detail="AppState not initialized")
     return app_state
 
-def get_settings() -> type[settings]:
-    """Inject settings (read-only)."""
-    return settings
-
 def get_chroma_repo(app_state: Annotated[AppState, Depends(get_app_state)]) -> ChromaRepo:
     """
     Inject ChromaDB repository từ AppState.

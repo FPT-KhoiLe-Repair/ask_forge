@@ -50,7 +50,7 @@ class ChromaRepo:
     # ------------------------------------------------------------
     # Data Upsertion
     # ------------------------------------------------------------
-    def upsert(self, index_name: str, all_chunks: List[Dict[str, Any]]):
+    def upsert(self, index_name: str, all_chunks: List[Dict[str, Any]], batch_size: int = 3000):
         col = self.get_or_create(index_name)
 
         ids, docs, metadatas = [], [], []
@@ -64,19 +64,25 @@ class ChromaRepo:
                     "page": ch["page"],
                     "chunk_id": ch["chunk_id"],
                 })
-                # Future extension: Add metadata such as topics, tags, difficulty, etc.
 
-        col.upsert(ids=ids, documents=docs, metadatas=metadatas)
+        n = len(ids)
+        for i in range(0, n, batch_size):
+            j = min(i + batch_size, n)
+            col.upsert(
+                ids=ids[i:j],
+                documents=docs[i:j],
+                metadatas=metadatas[i:j],
+            )
     # ------------------------------------------------------------
     # Query & Search (CHO CHAT) (New, must check)
     # ------------------------------------------------------------
-    def query(self,
-              index_name: str,
-              query_text: str,
-              n_results: int = 5,
-              where: Optional[str] = None,
-              where_document: Optional[str] = None
-    )-> Dict[str, Any]:
+    def _query(self,
+               index_name: str,
+               query_text: str,
+               n_results: int = 5,
+               where: Optional[str] = None,
+               where_document: Optional[str] = None
+               )-> Dict[str, Any]:
         col = self.get_collection(index_name)
 
         results = col.query(
@@ -94,7 +100,7 @@ class ChromaRepo:
                              n_results: int = 5,
                              min_relevance: float = 0.0,
     ) -> List[Dict[str, Any]]:
-        results = self.query(
+        results = self._query(
             index_name=index_name,
             query_text=query_text,
             n_results=n_results,

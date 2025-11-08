@@ -54,11 +54,3 @@ def build_queries_prompt_from_template(
         f.write(formatted_history)
 
     return formatted_history
-    return _render_prompt(template,
-                          question=seed_question,
-                          contexts=contexts,
-                          lang=lang,
-                          n=n,
-                          history_block=formatted_history,
-                          summary_block=summary_block)
-

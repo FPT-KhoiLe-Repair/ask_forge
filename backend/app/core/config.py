@@ -51,4 +51,3 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
-print(settings.HF_QUESTION_GENERATOR_CKPT)
