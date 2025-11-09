@@ -4,7 +4,7 @@ from typing import List
 from pydantic import AnyHttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ENV_PATH = Path(__file__).with_name(".env")  # luôn trỏ tới core/.env
+ENV_PATH = Path(__file__).with_name(".env")
 
 class Settings(BaseSettings):
     # App

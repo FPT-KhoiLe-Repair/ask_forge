@@ -1,21 +1,105 @@
-version: "3.9"
+version: '3.8'
 
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: askforge-redis
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: askforge-backend
     ports:
-      - "6379:6379"
-
-  rq-worker:
-    image: python:3.11-slim
-    container_name: askforge-rq
-    working_dir: /app
-    volumes:
-      - ./backend:/app
+      - "8000:8000"
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      # App settings
+      - DEBUG=False
+      - APP_PREFIX=/api
+
+      # Chunking settings
+      - CHUNK_SIZE=1024
+      - CHUNK_OVERLAP=300
+      - MIN_CHARS=300
+
+      # Storage
+      - PAGES_JSON_DIR=data/user_db
+
+      # Chroma
+      - CHROMA_PERSIST_DIR=.chroma
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+
+      # Gemini API (REQUIRED - thay bằng API key của bạn)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-your-gemini-api-key-here}
+      - GEMINI_MODEL_NAME=gemini-2.5-flash
+
+      # HuggingFace settings
+      - HF_QUESTION_GENERATOR_CKPT=Qwen/qwen-security-final-question-reformatted
+      - HF_LOCAL_ONLY=False
+      - HF_DEVICE_MAP=auto
+      - HF_DTYPE=
+      - HF_LOW_CPU_MEM=True
+      - HF_TRUST_REMOTE_CODE=False
+      - HF_PRELOAD_AT_STARTUP=True
+
+      # Redis (nếu sử dụng Redis queue)
+      - REDIS_URL=redis://redis:6379
+
+      # CORS
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/.chroma:/app/.chroma
+    networks:
+      - askforge-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    container_name: askforge-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
     depends_on:
-      - redis
-    command: >
-      sh -c "pip install rq && rq worker -u redis://redis:6379/0 qg"
+      - backend
+    networks:
+      - askforge-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis (optional - uncomment nếu muốn sử dụng Redis queue)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: askforge-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   networks:
+  #     - askforge-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+networks:
+  askforge-network:
+    driver: bridge
+
+volumes:
+  redis-data:
